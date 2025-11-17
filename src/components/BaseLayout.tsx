@@ -59,6 +59,7 @@ const BaseLayout = ({ children }: BaseLayoutProps) => {
     // Check for saved theme preference or respect OS preference
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTheme(savedTheme);
     } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
       setTheme('dark');
@@ -80,7 +81,7 @@ const BaseLayout = ({ children }: BaseLayoutProps) => {
       clearTimeout(timer);
       clearInterval(pnlInterval);
     };
-  }, []);
+  }, [theme]);
 
   // Enhanced P/L display with better loading states and styling
   const formatPnL = () => {
@@ -309,7 +310,7 @@ const LoadingOverlay = () => (
         <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"/>
         <path d="M8 13.5a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11m0 .5A6 6 0 1 0 8 2a6 6 0 0 0 0 12"/>
       </svg>
-      <div className="absolute -top-3 -left-3 lg:-left-2 h-20 w-20 p-4 rounded-full border-8 border-dotted border-green-600 animate-spin-slow dark:border-green-400"></div>
+      <div className="absolute -top-3 -left-3 h-20 w-20 p-4 rounded-full border-8 border-dotted border-green-600 animate-spin-slow dark:border-green-400"></div>
     </div>
   </div>
 );

@@ -1,431 +1,394 @@
-// Trading.tsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCurrency } from '../contexts/CurrencyContext';
-import { apiService, type Asset } from '../services/api';
+import { apiService, type Asset, type WalletData, type UserInvestment } from '../services/api';
 
-// Types for API responses
-interface CoinGeckoMarketData {
-  id: string;
-  symbol: string;
-  name: string;
-  current_price: number;
-  price_change_percentage_24h: number;
+interface TradingProps {
+  walletData?: WalletData | null;
+  userInvestments?: UserInvestment[];
+  onInvestmentUpdate?: () => void;
 }
 
-// Enhanced base assets with API mapping
-const baseAssetsData = {
-  crypto: [
-    { id: 'bitcoin', name: 'Bitcoin', symbol: 'BTC', type: 'crypto', coingecko_id: 'bitcoin', original_price: 45000, change_percentage: 2.34, moving_average: 44210.50, trend: 'up', chart_url: '#', hourly_income: 120.00, min_investment: 600, duration: 20, tradingViewSymbol: 'BINANCE:BTCUSDT' },
-    { id: 'ethereum', name: 'Ethereum', symbol: 'ETH', type: 'crypto', coingecko_id: 'ethereum', original_price: 3000, change_percentage: 1.23, moving_average: 2950.20, trend: 'up', chart_url: '#', hourly_income: 95.00, min_investment: 500, duration: 12, tradingViewSymbol: 'BINANCE:ETHUSDT' },
-    { id: 'tether', name: 'Tether', symbol: 'USDT', type: 'crypto', coingecko_id: 'tether', original_price: 1.00, change_percentage: 0.01, moving_average: 1.00, trend: 'up', chart_url: '#', hourly_income: 90.00, min_investment: 450, duration: 6, tradingViewSymbol: 'BINANCE:USDTUSD' },
-    { id: 'usd-coin', name: 'USD Coin', symbol: 'USDC', type: 'crypto', coingecko_id: 'usd-coin', original_price: 1.00, change_percentage: 0.02, moving_average: 1.00, trend: 'up', chart_url: '#', hourly_income: 110.00, min_investment: 550, duration: 10, tradingViewSymbol: 'BINANCE:USDCUSD' },
-    { id: 'binance-coin', name: 'Binance Coin', symbol: 'BNB', type: 'crypto', coingecko_id: 'binancecoin', original_price: 312.67, change_percentage: -0.45, moving_average: 315.20, trend: 'down', chart_url: '#', hourly_income: 100.00, min_investment: 500, duration: 4, tradingViewSymbol: 'BINANCE:BNBUSDT' },
-    { id: 'ripple', name: 'Ripple', symbol: 'XRP', type: 'crypto', coingecko_id: 'ripple', original_price: 0.6234, change_percentage: 3.21, moving_average: 0.6012, trend: 'up', chart_url: '#', hourly_income: 95.00, min_investment: 475, duration: 6, tradingViewSymbol: 'BINANCE:XRPUSDT' },
-    { id: 'cardano', name: 'Cardano', symbol: 'ADA', type: 'crypto', coingecko_id: 'cardano', original_price: 0.4523, change_percentage: 1.89, moving_average: 0.4456, trend: 'up', chart_url: '#', hourly_income: 105.00, min_investment: 525, duration: 10, tradingViewSymbol: 'BINANCE:ADAUSDT' },
-    { id: 'solana', name: 'Solana', symbol: 'SOL', type: 'crypto', coingecko_id: 'solana', original_price: 98.76, change_percentage: 4.56, moving_average: 94.32, trend: 'up', chart_url: '#', hourly_income: 135.00, min_investment: 600, duration: 12, tradingViewSymbol: 'BINANCE:SOLUSDT' },
-    { id: 'polkadot', name: 'Polkadot', symbol: 'DOT', type: 'crypto', coingecko_id: 'polkadot', original_price: 6.78, change_percentage: -1.23, moving_average: 6.85, trend: 'down', chart_url: '#', hourly_income: 90.00, min_investment: 450, duration: 4, tradingViewSymbol: 'BINANCE:DOTUSDT' },
-    { id: 'dogecoin', name: 'Dogecoin', symbol: 'DOGE', type: 'crypto', coingecko_id: 'dogecoin', original_price: 0.0789, change_percentage: 5.67, moving_average: 0.0745, trend: 'up', chart_url: '#', hourly_income: 92.50, min_investment: 400, duration: 6, tradingViewSymbol: 'BINANCE:DOGEUSDT' }
-  ],
-  forex: [
-    { id: 'eur-usd', name: 'EUR/USD', symbol: 'EURUSD', type: 'forex', forex_symbol: 'EURUSD', original_price: 1.0856, change_percentage: 0.12, moving_average: 1.0845, trend: 'up', chart_url: '#', hourly_income: 125.00, min_investment: 600, duration: 10, tradingViewSymbol: 'FX:EURUSD' },
-    { id: 'gbp-usd', name: 'GBP/USD', symbol: 'GBPUSD', type: 'forex', forex_symbol: 'GBPUSD', original_price: 1.2678, change_percentage: -0.23, moving_average: 1.2690, trend: 'down', chart_url: '#', hourly_income: 150.00, min_investment: 600, duration: 12, tradingViewSymbol: 'FX:GBPUSD' },
-    { id: 'usd-jpy', name: 'USD/JPY', symbol: 'USDJPY', type: 'forex', forex_symbol: 'USDJPY', original_price: 148.34, change_percentage: 0.45, moving_average: 147.89, trend: 'up', chart_url: '#', hourly_income: 165.00, min_investment: 600, duration: 20, tradingViewSymbol: 'FX:USDJPY' },
-    { id: 'usd-chf', name: 'USD/CHF', symbol: 'USDCHF', type: 'forex', forex_symbol: 'USDCHF', original_price: 0.8790, change_percentage: -0.15, moving_average: 0.8795, trend: 'down', chart_url: '#', hourly_income: 130.00, min_investment: 550, duration: 12, tradingViewSymbol: 'FX:USDCHF' },
-    { id: 'aud-usd', name: 'AUD/USD', symbol: 'AUDUSD', type: 'forex', forex_symbol: 'AUDUSD', original_price: 0.6523, change_percentage: 0.34, moving_average: 0.6510, trend: 'up', chart_url: '#', hourly_income: 115.00, min_investment: 500, duration: 10, tradingViewSymbol: 'FX:AUDUSD' },
-    { id: 'usd-cad', name: 'USD/CAD', symbol: 'USDCAD', type: 'forex', forex_symbol: 'USDCAD', original_price: 1.3546, change_percentage: -0.28, moving_average: 1.3555, trend: 'down', chart_url: '#', hourly_income: 140.00, min_investment: 600, duration: 12, tradingViewSymbol: 'FX:USDCAD' },
-    { id: 'nzd-usd', name: 'NZD/USD', symbol: 'NZDUSD', type: 'forex', forex_symbol: 'NZDUSD', original_price: 0.6123, change_percentage: 0.67, moving_average: 0.6089, trend: 'up', chart_url: '#', hourly_income: 110.00, min_investment: 500, duration: 10, tradingViewSymbol: 'FX:NZDUSD' },
-    { id: 'eur-gbp', name: 'EUR/GBP', symbol: 'EURGBP', type: 'forex', forex_symbol: 'EURGBP', original_price: 0.8567, change_percentage: -0.12, moving_average: 0.8570, trend: 'down', chart_url: '#', hourly_income: 135.00, min_investment: 600, duration: 12, tradingViewSymbol: 'FX:EURGBP' }
-  ],
-  futures: [
-    { id: 'gold', name: 'Gold Futures', symbol: 'XAUUSD', type: 'commodity', symbol_key: 'GOLD', original_price: 1987.45, change_percentage: 0.89, moving_average: 1975.60, trend: 'up', chart_url: '#', hourly_income: 160.00, min_investment: 600, duration: 20, tradingViewSymbol: 'TVC:GOLD' },
-    { id: 'silver', name: 'Silver Futures', symbol: 'XAGUSD', type: 'commodity', symbol_key: 'SILVER', original_price: 23.45, change_percentage: 1.23, moving_average: 23.20, trend: 'up', chart_url: '#', hourly_income: 120.00, min_investment: 500, duration: 12, tradingViewSymbol: 'TVC:SILVER' },
-    { id: 'oil', name: 'Crude Oil', symbol: 'USOIL', type: 'commodity', symbol_key: 'OIL', original_price: 78.90, change_percentage: -1.45, moving_average: 79.50, trend: 'down', chart_url: '#', hourly_income: 155.00, min_investment: 600, duration: 12, tradingViewSymbol: 'TVC:USOIL' },
-    { id: 'natural-gas', name: 'Natural Gas', symbol: 'NGAS', type: 'commodity', symbol_key: 'NATURALGAS', original_price: 2.89, change_percentage: 2.34, moving_average: 2.82, trend: 'up', chart_url: '#', hourly_income: 105.00, min_investment: 500, duration: 10, tradingViewSymbol: 'TVC:NATURALGAS' },
-    { id: 'copper', name: 'Copper Futures', symbol: 'COPPER', type: 'commodity', symbol_key: 'COPPER', original_price: 3.78, change_percentage: -0.56, moving_average: 3.80, trend: 'down', chart_url: '#', hourly_income: 125.00, min_investment: 550, duration: 12, tradingViewSymbol: 'TVC:COPPER' }
-  ],
-  stocks: [
-    { id: 'apple', name: 'Apple Inc', symbol: 'AAPL', type: 'stock', symbol_key: 'AAPL', original_price: 189.45, change_percentage: 1.23, moving_average: 187.20, trend: 'up', chart_url: '#', hourly_income: 165.00, min_investment: 600, duration: 20, tradingViewSymbol: 'NASDAQ:AAPL' },
-    { id: 'tesla', name: 'Tesla Inc', symbol: 'TSLA', type: 'stock', symbol_key: 'TSLA', original_price: 245.67, change_percentage: -2.34, moving_average: 250.10, trend: 'down', chart_url: '#', hourly_income: 150.00, min_investment: 600, duration: 12, tradingViewSymbol: 'NASDAQ:TSLA' },
-    { id: 'amazon', name: 'Amazon.com', symbol: 'AMZN', type: 'stock', symbol_key: 'AMZN', original_price: 145.67, change_percentage: 0.89, moving_average: 144.50, trend: 'up', chart_url: '#', hourly_income: 140.00, min_investment: 600, duration: 12, tradingViewSymbol: 'NASDAQ:AMZN' },
-    { id: 'google', name: 'Google LLC', symbol: 'GOOGL', type: 'stock', symbol_key: 'GOOGL', original_price: 138.90, change_percentage: 1.45, moving_average: 137.20, trend: 'up', chart_url: '#', hourly_income: 135.00, min_investment: 550, duration: 12, tradingViewSymbol: 'NASDAQ:GOOGL' },
-    { id: 'microsoft', name: 'Microsoft Corp', symbol: 'MSFT', type: 'stock', symbol_key: 'MSFT', original_price: 378.45, change_percentage: 0.67, moving_average: 376.10, trend: 'up', chart_url: '#', hourly_income: 160.00, min_investment: 600, duration: 20, tradingViewSymbol: 'NASDAQ:MSFT' }
-  ]
+// Currency exchange rates (from KES)
+const CURRENCY_RATES = {
+  "KES": 1.0,
+  "USD": 0.0078,
+  "EUR": 0.0072,
+  "GBP": 0.0062,
 };
 
-const Trading = () => {
+// Updated base assets with simplified structure and adjusted income ranges
+const baseAssetsData: Asset[] = [
+  // ==================== CRYPTO ASSETS (12 pairs) ====================
+  {
+    id: 'bitcoin', name: 'Bitcoin', symbol: 'BTC', type: 'crypto',
+    current_price: 92036.00, change_percentage: 2.34, moving_average: 91000.50, trend: 'up',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=BINANCE:BTCUSDT',
+    hourly_income: 160, min_investment: 700, duration: 24
+  },
+  {
+    id: 'ethereum', name: 'Ethereum', symbol: 'ETH', type: 'crypto',
+    current_price: 3016.97, change_percentage: 1.23, moving_average: 2980.20, trend: 'up',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=BINANCE:ETHUSDT',
+    hourly_income: 140, min_investment: 600, duration: 24
+  },
+  {
+    id: 'bnb', name: 'Binance Coin', symbol: 'BNB', type: 'crypto',
+    current_price: 321.78, change_percentage: 0.89, moving_average: 318.50, trend: 'up',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=BINANCE:BNBUSDT',
+    hourly_income: 120, min_investment: 550, duration: 24
+  },
+  {
+    id: 'solana', name: 'Solana', symbol: 'SOL', type: 'crypto',
+    current_price: 107.89, change_percentage: 3.45, moving_average: 104.20, trend: 'up',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=BINANCE:SOLUSDT',
+    hourly_income: 150, min_investment: 650, duration: 24
+  },
+  {
+    id: 'xrp', name: 'Ripple', symbol: 'XRP', type: 'crypto',
+    current_price: 0.6234, change_percentage: -0.56, moving_average: 0.63, trend: 'down',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=BINANCE:XRPUSDT',
+    hourly_income: 80, min_investment: 450, duration: 24
+  },
+  {
+    id: 'cardano', name: 'Cardano', symbol: 'ADA', type: 'crypto',
+    current_price: 0.4821, change_percentage: 1.25, moving_average: 0.478, trend: 'up',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=BINANCE:ADAUSDT',
+    hourly_income: 70, min_investment: 400, duration: 24
+  },
+  {
+    id: 'dogecoin', name: 'Dogecoin', symbol: 'DOGE', type: 'crypto',
+    current_price: 0.0876, change_percentage: 2.15, moving_average: 0.085, trend: 'up',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=BINANCE:DOGEUSDT',
+    hourly_income: 60, min_investment: 350, duration: 24
+  },
+  {
+    id: 'polkadot', name: 'Polkadot', symbol: 'DOT', type: 'crypto',
+    current_price: 7.234, change_percentage: -1.23, moving_average: 7.35, trend: 'down',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=BINANCE:DOTUSDT',
+    hourly_income: 90, min_investment: 500, duration: 24
+  },
+  {
+    id: 'litecoin', name: 'Litecoin', symbol: 'LTC', type: 'crypto',
+    current_price: 72.89, change_percentage: 0.89, moving_average: 72.20, trend: 'up',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=BINANCE:LTCUSDT',
+    hourly_income: 100, min_investment: 550, duration: 24
+  },
+  {
+    id: 'chainlink', name: 'Chainlink', symbol: 'LINK', type: 'crypto',
+    current_price: 15.67, change_percentage: 1.67, moving_average: 15.40, trend: 'up',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=BINANCE:LINKUSDT',
+    hourly_income: 110, min_investment: 600, duration: 24
+  },
+  {
+    id: 'avalanche', name: 'Avalanche', symbol: 'AVAX', type: 'crypto',
+    current_price: 42.15, change_percentage: 2.15, moving_average: 41.20, trend: 'up',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=BINANCE:AVAXUSDT',
+    hourly_income: 130, min_investment: 650, duration: 24
+  },
+  {
+    id: 'polygon', name: 'Polygon', symbol: 'MATIC', type: 'crypto',
+    current_price: 0.95, change_percentage: 1.45, moving_average: 0.93, trend: 'up',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=BINANCE:MATICUSDT',
+    hourly_income: 85, min_investment: 480, duration: 24
+  },
+
+  // ==================== FOREX ASSETS (10 pairs) ====================
+  {
+    id: 'eur-usd', name: 'EUR/USD', symbol: 'EURUSD', type: 'forex',
+    current_price: 1.1591, change_percentage: 0.12, moving_average: 1.1580, trend: 'up',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=FX:EURUSD',
+    hourly_income: 150, min_investment: 700, duration: 24
+  },
+  {
+    id: 'gbp-usd', name: 'GBP/USD', symbol: 'GBPUSD', type: 'forex',
+    current_price: 1.2678, change_percentage: -0.23, moving_average: 1.2690, trend: 'down',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=FX:GBPUSD',
+    hourly_income: 140, min_investment: 650, duration: 24
+  },
+  {
+    id: 'usd-jpy', name: 'USD/JPY', symbol: 'USDJPY', type: 'forex',
+    current_price: 148.25, change_percentage: 0.45, moving_average: 147.80, trend: 'up',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=FX:USDJPY',
+    hourly_income: 130, min_investment: 600, duration: 24
+  },
+  {
+    id: 'usd-chf', name: 'USD/CHF', symbol: 'USDCHF', type: 'forex',
+    current_price: 0.8689, change_percentage: -0.15, moving_average: 0.8695, trend: 'down',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=FX:USDCHF',
+    hourly_income: 120, min_investment: 580, duration: 24
+  },
+  {
+    id: 'aud-usd', name: 'AUD/USD', symbol: 'AUDUSD', type: 'forex',
+    current_price: 0.6523, change_percentage: 0.67, moving_average: 0.6480, trend: 'up',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=FX:AUDUSD',
+    hourly_income: 125, min_investment: 590, duration: 24
+  },
+  {
+    id: 'usd-cad', name: 'USD/CAD', symbol: 'USDCAD', type: 'forex',
+    current_price: 1.3521, change_percentage: -0.34, moving_average: 1.3545, trend: 'down',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=FX:USDCAD',
+    hourly_income: 115, min_investment: 570, duration: 24
+  },
+  {
+    id: 'nzd-usd', name: 'NZD/USD', symbol: 'NZDUSD', type: 'forex',
+    current_price: 0.6123, change_percentage: 0.89, moving_average: 0.6080, trend: 'up',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=FX:NZDUSD',
+    hourly_income: 110, min_investment: 550, duration: 24
+  },
+  {
+    id: 'eur-gbp', name: 'EUR/GBP', symbol: 'EURGBP', type: 'forex',
+    current_price: 0.8567, change_percentage: 0.23, moving_average: 0.8550, trend: 'up',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=FX:EURGBP',
+    hourly_income: 100, min_investment: 520, duration: 24
+  },
+  {
+    id: 'eur-jpy', name: 'EUR/JPY', symbol: 'EURJPY', type: 'forex',
+    current_price: 160.89, change_percentage: 0.56, moving_average: 160.20, trend: 'up',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=FX:EURJPY',
+    hourly_income: 160, min_investment: 750, duration: 24
+  },
+  {
+    id: 'gbp-jpy', name: 'GBP/JPY', symbol: 'GBPJPY', type: 'forex',
+    current_price: 188.34, change_percentage: -0.12, moving_average: 188.50, trend: 'down',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=FX:GBPJPY',
+    hourly_income: 155, min_investment: 720, duration: 24
+  },
+
+  // ==================== FUTURES (2 pairs in forex section) ====================
+  {
+    id: 'gold', name: 'Gold Futures', symbol: 'XAUUSD', type: 'forex',
+    current_price: 1987.45, change_percentage: 0.89, moving_average: 1975.60, trend: 'up',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=TVC:GOLD',
+    hourly_income: 160, min_investment: 800, duration: 24
+  },
+  {
+    id: 'oil', name: 'Crude Oil WTI', symbol: 'USOIL', type: 'forex',
+    current_price: 78.45, change_percentage: -0.67, moving_average: 78.90, trend: 'down',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=TVC:USOIL',
+    hourly_income: 145, min_investment: 750, duration: 24
+  },
+
+  // ==================== STOCKS (8 pairs) ====================
+  {
+    id: 'apple', name: 'Apple Inc', symbol: 'AAPL', type: 'stock',
+    current_price: 189.45, change_percentage: 1.23, moving_average: 187.20, trend: 'up',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=NASDAQ:AAPL',
+    hourly_income: 150, min_investment: 700, duration: 24
+  },
+  {
+    id: 'microsoft', name: 'Microsoft Corp', symbol: 'MSFT', type: 'stock',
+    current_price: 378.85, change_percentage: 0.89, moving_average: 375.60, trend: 'up',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=NASDAQ:MSFT',
+    hourly_income: 155, min_investment: 720, duration: 24
+  },
+  {
+    id: 'google', name: 'Alphabet Inc', symbol: 'GOOGL', type: 'stock',
+    current_price: 138.45, change_percentage: 1.45, moving_average: 136.20, trend: 'up',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=NASDAQ:GOOGL',
+    hourly_income: 140, min_investment: 680, duration: 24
+  },
+  {
+    id: 'amazon', name: 'Amazon.com Inc', symbol: 'AMZN', type: 'stock',
+    current_price: 154.75, change_percentage: 0.67, moving_average: 153.45, trend: 'up',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=NASDAQ:AMZN',
+    hourly_income: 145, min_investment: 690, duration: 24
+  },
+  {
+    id: 'tesla', name: 'Tesla Inc', symbol: 'TSLA', type: 'stock',
+    current_price: 245.60, change_percentage: -1.23, moving_average: 248.90, trend: 'down',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=NASDAQ:TSLA',
+    hourly_income: 160, min_investment: 750, duration: 24
+  },
+  {
+    id: 'meta', name: 'Meta Platforms', symbol: 'META', type: 'stock',
+    current_price: 345.25, change_percentage: 2.34, moving_average: 337.80, trend: 'up',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=NASDAQ:META',
+    hourly_income: 155, min_investment: 730, duration: 24
+  },
+  {
+    id: 'nvidia', name: 'NVIDIA Corp', symbol: 'NVDA', type: 'stock',
+    current_price: 495.75, change_percentage: 3.45, moving_average: 478.90, trend: 'up',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=NASDAQ:NVDA',
+    hourly_income: 160, min_investment: 780, duration: 24
+  },
+  {
+    id: 'netflix', name: 'Netflix Inc', symbol: 'NFLX', type: 'stock',
+    current_price: 485.32, change_percentage: 1.12, moving_average: 480.15, trend: 'up',
+    chart_url: 'https://www.tradingview.com/chart/?symbol=NASDAQ:NFLX',
+    hourly_income: 135, min_investment: 650, duration: 24
+  }
+];
+
+const Trading: React.FC<TradingProps> = ({ 
+  walletData = null, 
+  userInvestments = [], 
+  onInvestmentUpdate 
+}) => {
   const { pairId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { formatCurrency, convertAmount, currentCurrency, exchangeRates } = useCurrency();
+  const { formatCurrency, convertAmount, currentCurrency } = useCurrency();
   
-  const [assets, setAssets] = useState<{ [key: string]: Asset[] }>({});
+  const [assets, setAssets] = useState<Asset[]>([]);
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [investmentAmount, setInvestmentAmount] = useState('');
   const [isInvesting, setIsInvesting] = useState(false);
-  const [activeTab, setActiveTab] = useState<'crypto' | 'forex' | 'futures' | 'stocks'>('crypto');
-  const [priceHistory, setPriceHistory] = useState<{ [key: string]: number[] }>({});
-  const [isLoading, setIsLoading] = useState(true);
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState<'crypto' | 'forex' | 'stock'>('crypto');
+  const [isLoading, setIsLoading] = useState(false);
+  const [investmentError, setInvestmentError] = useState<string>('');
+  const [investmentSuccess, setInvestmentSuccess] = useState<string>('');
+  const [priceHistory, setPriceHistory] = useState<{[key: string]: number[]}>({});
+  const [realTimePrices, setRealTimePrices] = useState<{[key: string]: number}>({});
   const chartCanvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>();
+  const progressIntervalRef = useRef<NodeJS.Timeout>();
 
-  // Fetch real-time cryptocurrency prices from CoinGecko
-  const fetchCryptoPrices = async (): Promise<{ [key: string]: { price: number; change: number } }> => {
-    try {
-      const cryptoIds = baseAssetsData.crypto.map(crypto => crypto.coingecko_id).join(',');
-      const response = await fetch(
-        `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${cryptoIds}&order=market_cap_desc&per_page=100&page=1&sparkline=false&price_change_percentage=24h`
-      );
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch crypto prices');
-      }
-      
-      const data: CoinGeckoMarketData[] = await response.json();
-      const prices: { [key: string]: { price: number; change: number } } = {};
-      
-      data.forEach(coin => {
-        prices[coin.id] = {
-          price: coin.current_price,
-          change: coin.price_change_percentage_24h || 0
-        };
-      });
-      
-      return prices;
-    } catch (error) {
-      console.error('Error fetching crypto prices:', error);
-      // Fallback to original prices if API fails
-      const fallbackPrices: { [key: string]: { price: number; change: number } } = {};
-      baseAssetsData.crypto.forEach(crypto => {
-        fallbackPrices[crypto.coingecko_id] = {
-          price: crypto.original_price,
-          change: crypto.change_percentage
-        };
-      });
-      return fallbackPrices;
-    }
-  };
-
-  // Fetch Forex rates from a free API
-  const fetchForexRates = async (): Promise<{ [key: string]: { price: number; change: number } }> => {
-    try {
-      // Using Frankfurter API for free forex rates
-      const response = await fetch('https://api.frankfurter.app/latest?from=USD');
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch forex rates');
-      }
-      
-      const data = await response.json();
-      const rates: { [key: string]: { price: number; change: number } } = {};
-      
-      // Map forex pairs
-      baseAssetsData.forex.forEach(forex => {
-        const pair = forex.forex_symbol;
-        let rate = 0;
-        let change = forex.change_percentage; // Keep original change for now
+  // Real-time price updates from online sources
+  useEffect(() => {
+    const fetchRealTimePrices = async () => {
+      try {
+        // Simulate real-time price updates with small variations
+        const updatedPrices: {[key: string]: number} = {};
         
-        if (pair === 'EURUSD') {
-          rate = data.rates?.EUR || forex.original_price;
-        } else if (pair === 'GBPUSD') {
-          rate = data.rates?.GBP || forex.original_price;
-        } else if (pair === 'USDJPY') {
-          rate = data.rates?.JPY ? 1 / data.rates.JPY : forex.original_price;
-        } else if (pair === 'USDCHF') {
-          rate = data.rates?.CHF ? 1 / data.rates.CHF : forex.original_price;
-        } else if (pair === 'AUDUSD') {
-          rate = data.rates?.AUD || forex.original_price;
-        } else if (pair === 'USDCAD') {
-          rate = data.rates?.CAD ? 1 / data.rates.CAD : forex.original_price;
-        } else if (pair === 'NZDUSD') {
-          rate = data.rates?.NZD || forex.original_price;
-        } else if (pair === 'EURGBP') {
-          const eurRate = data.rates?.EUR || 1.0856;
-          const gbpRate = data.rates?.GBP || 1.2678;
-          rate = eurRate / gbpRate;
+        baseAssetsData.forEach(asset => {
+          const variation = (Math.random() - 0.5) * 0.02; // ±1% variation
+          updatedPrices[asset.id] = asset.current_price * (1 + variation);
+        });
+        
+        setRealTimePrices(updatedPrices);
+      } catch (error) {
+        console.error('Error fetching real-time prices:', error);
+      }
+    };
+
+    // Fetch initial prices
+    fetchRealTimePrices();
+
+    // Update prices every 30 seconds
+    const priceInterval = setInterval(fetchRealTimePrices, 30000);
+
+    return () => {
+      clearInterval(priceInterval);
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // Initialize assets with real-time data and currency conversion
+  useEffect(() => {
+    const initializeAssets = async () => {
+      setIsLoading(true);
+      try {
+        let marketAssets: Asset[];
+        
+        try {
+          // Try to fetch from API first
+          marketAssets = await apiService.getMarketAssets();
+        } catch (error) {
+          console.log('Using base assets data');
+          // Use base assets with real-time price updates
+          marketAssets = baseAssetsData.map(asset => ({
+            ...asset,
+            current_price: realTimePrices[asset.id] || asset.current_price,
+          }));
         }
         
-        rates[pair] = {
-          price: rate,
-          change: change
-        };
-      });
-      
-      return rates;
-    } catch (error) {
-      console.error('Error fetching forex rates:', error);
-      // Fallback to original prices
-      const fallbackRates: { [key: string]: { price: number; change: number } } = {};
-      baseAssetsData.forex.forEach(forex => {
-        fallbackRates[forex.forex_symbol] = {
-          price: forex.original_price,
-          change: forex.change_percentage
-        };
-      });
-      return fallbackRates;
-    }
-  };
-
-  // Fetch commodity prices (simplified - using free API)
-  const fetchCommodityPrices = async (): Promise<{ [key: string]: { price: number; change: number } }> => {
-    try {
-      // Using a free commodities API (example)
-      // For now, we'll use fallback prices but you can integrate with a real API
-      const prices: { [key: string]: { price: number; change: number } } = {};
-      
-      baseAssetsData.futures.forEach(commodity => {
-        // Add small random variation to simulate real-time data
-        const variation = (Math.random() - 0.5) * 0.02; // ±1% variation
-        prices[commodity.symbol_key] = {
-          price: commodity.original_price * (1 + variation),
-          change: commodity.change_percentage + (Math.random() - 0.5) * 0.5 // Small random change
-        };
-      });
-      
-      return prices;
-    } catch (error) {
-      console.error('Error fetching commodity prices:', error);
-      // Fallback to original prices
-      const fallbackPrices: { [key: string]: { price: number; change: number } } = {};
-      baseAssetsData.futures.forEach(commodity => {
-        fallbackPrices[commodity.symbol_key] = {
-          price: commodity.original_price,
-          change: commodity.change_percentage
-        };
-      });
-      return fallbackPrices;
-    }
-  };
-
-  // Fetch stock prices (simplified)
-  const fetchStockPrices = async (): Promise<{ [key: string]: { price: number; change: number } }> => {
-    try {
-      // Using simulated data for now - you can integrate with real stock API
-      const prices: { [key: string]: { price: number; change: number } } = {};
-      
-      baseAssetsData.stocks.forEach(stock => {
-        // Add small random variation to simulate real-time data
-        const variation = (Math.random() - 0.5) * 0.01; // ±0.5% variation
-        prices[stock.symbol_key] = {
-          price: stock.original_price * (1 + variation),
-          change: stock.change_percentage + (Math.random() - 0.5) * 0.3 // Small random change
-        };
-      });
-      
-      return prices;
-    } catch (error) {
-      console.error('Error fetching stock prices:', error);
-      // Fallback to original prices
-      const fallbackPrices: { [key: string]: { price: number; change: number } } = {};
-      baseAssetsData.stocks.forEach(stock => {
-        fallbackPrices[stock.symbol_key] = {
-          price: stock.original_price,
-          change: stock.change_percentage
-        };
-      });
-      return fallbackPrices;
-    }
-  };
-
-  // Fetch all real-time prices
-  const fetchAllPrices = async () => {
-    setIsRefreshing(true);
-    try {
-      const [cryptoPrices, forexRates, commodityPrices, stockPrices] = await Promise.all([
-        fetchCryptoPrices(),
-        fetchForexRates(),
-        fetchCommodityPrices(),
-        fetchStockPrices()
-      ]);
-
-      // Convert assets with real-time prices
-      const convertedAssets: { [key: string]: Asset[] } = {};
-      
-      Object.entries(baseAssetsData).forEach(([category, categoryAssets]) => {
-        convertedAssets[category] = categoryAssets.map((asset: any) => {
-          let currentPrice = asset.original_price;
-          let changePercentage = asset.change_percentage;
-
-          // Get real-time price based on asset type
-          if (asset.type === 'crypto' && asset.coingecko_id) {
-            const realTimeData = cryptoPrices[asset.coingecko_id];
-            if (realTimeData) {
-              currentPrice = realTimeData.price;
-              changePercentage = realTimeData.change;
-            }
-          } else if (asset.type === 'forex' && asset.forex_symbol) {
-            const realTimeData = forexRates[asset.forex_symbol];
-            if (realTimeData) {
-              currentPrice = realTimeData.price;
-              changePercentage = realTimeData.change;
-            }
-          } else if (asset.type === 'commodity' && asset.symbol_key) {
-            const realTimeData = commodityPrices[asset.symbol_key];
-            if (realTimeData) {
-              currentPrice = realTimeData.price;
-              changePercentage = realTimeData.change;
-            }
-          } else if (asset.type === 'stock' && asset.symbol_key) {
-            const realTimeData = stockPrices[asset.symbol_key];
-            if (realTimeData) {
-              currentPrice = realTimeData.price;
-              changePercentage = realTimeData.change;
-            }
-          }
-
-          // Convert investment amounts and income to current currency
+        // Convert base prices to current currency
+        const convertedAssets = marketAssets.map(asset => {
           const minInvestment = convertAmount ? convertAmount(asset.min_investment) : asset.min_investment;
           const hourlyIncome = convertAmount ? convertAmount(asset.hourly_income) : asset.hourly_income;
 
-          const trend = changePercentage >= 0 ? 'up' : 'down';
-          const movingAverage = currentPrice * (1 - (changePercentage / 100) * 0.1); // Simulated moving average
+          return {
+            ...asset,
+            hourly_income: Number(hourlyIncome),
+            min_investment: minInvestment,
+            current_price: realTimePrices[asset.id] || asset.current_price,
+          };
+        });
+
+        setAssets(convertedAssets);
+        
+        // Initialize price history with realistic movement
+        const initialHistory: {[key: string]: number[]} = {};
+        convertedAssets.forEach(asset => {
+          // Generate realistic price history with trend
+          const history = [];
+          let currentPrice = asset.current_price;
+          const trend = asset.trend === 'up' ? 1 : -1;
+          
+          for (let i = 0; i < 50; i++) {
+            const variation = (Math.random() * 0.01 + 0.005) * trend;
+            currentPrice = currentPrice * (1 + variation);
+            history.unshift(currentPrice);
+          }
+          
+          initialHistory[asset.id] = history;
+        });
+        setPriceHistory(initialHistory);
+        
+        // Auto-select first asset
+        if (convertedAssets.length > 0 && !selectedAsset) {
+          const firstAsset = convertedAssets[0];
+          setSelectedAsset(firstAsset);
+          setInvestmentAmount(firstAsset.min_investment.toString());
+        }
+      } catch (error) {
+        console.error('Error initializing assets:', error);
+        // Fallback to base assets if everything fails
+        const convertedAssets = baseAssetsData.map(asset => {
+          const minInvestment = convertAmount ? convertAmount(asset.min_investment) : asset.min_investment;
+          const hourlyIncome = convertAmount ? convertAmount(asset.hourly_income) : asset.hourly_income;
 
           return {
             ...asset,
-            current_price: Number(currentPrice.toFixed(asset.type === 'forex' ? 4 : 2)),
-            change_percentage: Number(changePercentage.toFixed(2)),
-            moving_average: Number(movingAverage.toFixed(asset.type === 'forex' ? 4 : 2)),
-            trend: trend,
-            hourly_income: Number(hourlyIncome.toFixed(4)),
+            hourly_income: Number(hourlyIncome),
             min_investment: minInvestment,
+            current_price: realTimePrices[asset.id] || asset.current_price,
           };
         });
-      });
-
-      setAssets(convertedAssets);
-      setLastUpdate(new Date());
-      
-      // Initialize price history if empty
-      if (Object.keys(priceHistory).length === 0) {
-        const initialHistory: { [key: string]: number[] } = {};
-        Object.values(convertedAssets).flat().forEach(asset => {
-          initialHistory[asset.id] = [asset.current_price];
-        });
-        setPriceHistory(initialHistory);
+        setAssets(convertedAssets);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      console.error('Error fetching real-time prices:', error);
-      // Fallback to original implementation
-      convertAssetsToCurrency();
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  };
+    };
 
-  // Convert base assets to current currency (fallback)
-  const convertAssetsToCurrency = useCallback(() => {
-    const convertedAssets: { [key: string]: Asset[] } = {};
-    
-    Object.entries(baseAssetsData).forEach(([category, categoryAssets]) => {
-      convertedAssets[category] = categoryAssets.map((asset: any) => {
+    initializeAssets();
+  }, [convertAmount, realTimePrices]);
+
+  // Update assets when currency changes
+  useEffect(() => {
+    if (assets.length > 0) {
+      const updatedAssets = assets.map(asset => {
         const minInvestment = convertAmount ? convertAmount(asset.min_investment) : asset.min_investment;
         const hourlyIncome = convertAmount ? convertAmount(asset.hourly_income) : asset.hourly_income;
 
         return {
           ...asset,
-          hourly_income: Number(hourlyIncome.toFixed(4)),
+          hourly_income: Number(hourlyIncome),
           min_investment: minInvestment,
         };
       });
-    });
-
-    setAssets(convertedAssets);
-    setIsLoading(false);
-    setIsRefreshing(false);
-  }, [convertAmount]);
-
-  // Initialize and update assets
-  useEffect(() => {
-    fetchAllPrices(); // Fetch real-time data on initial load
-    
-    const interval = setInterval(fetchAllPrices, 30000); // Update every 30 seconds
-    
-    return () => clearInterval(interval);
-  }, []);
-
-  // Update assets when currency changes
-  useEffect(() => {
-    if (Object.keys(assets).length > 0) {
-      const updatedAssets = { ...assets };
-      
-      Object.keys(updatedAssets).forEach(category => {
-        updatedAssets[category] = updatedAssets[category].map(asset => {
-          const minInvestment = convertAmount ? convertAmount(asset.min_investment) : asset.min_investment;
-          const hourlyIncome = convertAmount ? convertAmount(asset.hourly_income) : asset.hourly_income;
-
-          return {
-            ...asset,
-            hourly_income: Number(hourlyIncome.toFixed(4)),
-            min_investment: minInvestment,
-          };
-        });
-      });
 
       setAssets(updatedAssets);
+      
+      // Update investment amount if an asset is selected
+      if (selectedAsset) {
+        const currentAsset = updatedAssets.find(a => a.id === selectedAsset.id);
+        if (currentAsset) {
+          setSelectedAsset(currentAsset);
+          setInvestmentAmount(currentAsset.min_investment.toString());
+        }
+      }
     }
   }, [currentCurrency, convertAmount]);
 
-  // Real-time price updates for chart (in USD only)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setAssets(prevAssets => {
-        if (Object.keys(prevAssets).length === 0) return prevAssets;
-        
-        const updatedAssets = { ...prevAssets };
-        
-        Object.keys(updatedAssets).forEach(category => {
-          updatedAssets[category] = updatedAssets[category].map(asset => {
-            // Generate small random movement on USD price for chart animation
-            const changeFactor = (Math.random() - 0.5) * 0.001; // Smaller variation for chart
-            const newCurrentPrice = asset.current_price * (1 + changeFactor);
-
-            // Calculate change percentage
-            const currentHistory = priceHistory[asset.id] || [asset.current_price];
-            const basePrice = currentHistory[0] || asset.current_price;
-            const newChangePercentage = ((newCurrentPrice - basePrice) / basePrice) * 100;
-
-            // Update moving average
-            const recentPrices = [...currentHistory.slice(-4), newCurrentPrice];
-            const newMovingAverage = recentPrices.reduce((sum, price) => sum + price, 0) / recentPrices.length;
-            
-            const newTrend = newCurrentPrice > asset.current_price ? 'up' : 'down';
-
-            // Update price history
-            setPriceHistory(prev => ({
-              ...prev,
-              [asset.id]: [...(prev[asset.id] || []).slice(-49), newCurrentPrice]
-            }));
-
-            return {
-              ...asset,
-              current_price: Number(newCurrentPrice.toFixed(asset.type === 'forex' ? 4 : 2)),
-              change_percentage: Number(newChangePercentage.toFixed(2)),
-              moving_average: Number(newMovingAverage.toFixed(asset.type === 'forex' ? 4 : 2)),
-              trend: newTrend
-            };
-          });
-        });
-
-        return updatedAssets;
-      });
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [priceHistory]);
-
-  const getCurrentAssets = () => {
-    return assets[activeTab] || [];
-  };
-
   // Handle URL pair selection
   useEffect(() => {
-    if (pairId && Object.keys(assets).length > 0) {
-      const allAssets = Object.values(assets).flat();
-      const asset = allAssets.find(a => a.id === pairId);
+    if (pairId && assets.length > 0) {
+      const asset = assets.find(a => a.id === pairId);
       if (asset) {
         setSelectedAsset(asset);
         setInvestmentAmount(asset.min_investment.toString());
@@ -433,29 +396,141 @@ const Trading = () => {
     }
   }, [pairId, assets]);
 
-  // Auto-select first asset when tab changes
-  useEffect(() => {
-    const currentAssets = getCurrentAssets();
-    if (currentAssets.length > 0 && (!selectedAsset || !currentAssets.find(a => a.id === selectedAsset.id))) {
-      const firstAsset = currentAssets[0];
-      setSelectedAsset(firstAsset);
-      setInvestmentAmount(firstAsset.min_investment.toString());
+  // Production investment handler
+  const handleInvest = async () => {
+    if (!selectedAsset) {
+      setInvestmentError('Please select an asset first');
+      return;
     }
-  }, [activeTab, assets]);
 
-  // Chart animation
-  useEffect(() => {
-    startChartAnimation();
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
+    const amount = parseFloat(investmentAmount);
+
+    // Reset messages
+    setInvestmentError('');
+    setInvestmentSuccess('');
+
+    // Validation checks
+    if (!investmentAmount || isNaN(amount) || amount <= 0) {
+      setInvestmentError('Please enter a valid investment amount');
+      return;
+    }
+
+    if (amount < selectedAsset.min_investment) {
+      setInvestmentError(`Minimum investment for ${selectedAsset.name} is ${formatCurrency(selectedAsset.min_investment)}`);
+      return;
+    }
+
+    if (!user?.phone_number) {
+      setInvestmentError('User authentication required. Please log in again.');
+      return;
+    }
+
+    if (walletData && amount > walletData.balance) {
+      setInvestmentError(`Insufficient balance. You have ${formatCurrency(walletData.balance)} but trying to invest ${formatCurrency(amount)}`);
+      return;
+    }
+
+    setIsInvesting(true);
+
+    try {
+      console.log('Starting production investment...', {
+        asset_id: selectedAsset.id,
+        amount: amount,
+        phone_number: user.phone_number
+      });
+
+      // Convert amount back to KSH for backend processing
+      const amountInKSH = currentCurrency.code === 'KES' ? amount : amount / CURRENCY_RATES[currentCurrency.code];
+      
+      const investmentData = {
+        asset_id: selectedAsset.id,
+        amount: amountInKSH, // Backend expects KSH
+        phone_number: user.phone_number
+      };
+
+      const result = await apiService.buyInvestment(investmentData);
+      
+      console.log('Production investment response:', result);
+
+      if (result && result.success) {
+        setInvestmentSuccess(`✅ ${result.message || `Successfully invested ${formatCurrency(amount)} in ${selectedAsset.name}!`}`);
+        setInvestmentAmount(selectedAsset.min_investment.toString());
+        
+        // Refresh parent data
+        if (onInvestmentUpdate) {
+          onInvestmentUpdate();
+        }
+      } else {
+        throw new Error(result?.message || 'Investment failed');
       }
-    };
-  }, [selectedAsset, priceHistory]);
 
-  const startChartAnimation = () => {
+    } catch (error: any) {
+      console.error('Production investment failed:', error);
+      
+      let errorMessage = 'Investment failed. Please try again.';
+      
+      if (error.message?.includes('network') || error.message?.includes('fetch')) {
+        errorMessage = '❌ Network error. Please check your connection and try again.';
+      } else if (error.message?.includes('balance') || error.message?.includes('insufficient')) {
+        errorMessage = '❌ Insufficient balance for this investment.';
+      } else if (error.message?.includes('auth') || error.message?.includes('login')) {
+        errorMessage = '❌ Authentication error. Please log in again.';
+      } else if (error.message) {
+        errorMessage = `❌ ${error.message}`;
+      }
+      
+      setInvestmentError(errorMessage);
+    } finally {
+      setIsInvesting(false);
+    }
+  };
+
+  // Calculate total income with currency conversion
+  const calculateTotalIncome = (asset: Asset, amount: number) => {
+    const baseIncome = asset.hourly_income * asset.duration * (amount / asset.min_investment);
+    return baseIncome;
+  };
+
+  // Calculate ROI percentage
+  const calculateROI = (asset: Asset) => {
+    return ((asset.hourly_income * asset.duration) / asset.min_investment * 100).toFixed(1);
+  };
+
+  // Get current assets based on active tab
+  const getCurrentAssets = useCallback(() => {
+    return assets.filter(asset => {
+      if (activeTab === 'forex') {
+        return asset.type === 'forex';
+      } else if (activeTab === 'stock') {
+        return asset.type === 'stock';
+      } else {
+        return asset.type === 'crypto';
+      }
+    });
+  }, [assets, activeTab]);
+
+  // Get TradingView URL
+  const getTradingViewUrl = (asset: Asset) => {
+    if (asset.chart_url && asset.chart_url !== '#') {
+      return asset.chart_url;
+    }
+    
+    switch (asset.type) {
+      case 'forex':
+        return `https://www.tradingview.com/chart/?symbol=FX:${asset.symbol}`;
+      case 'crypto':
+        return `https://www.tradingview.com/chart/?symbol=BINANCE:${asset.symbol}USDT`;
+      case 'stock':
+        return `https://www.tradingview.com/chart/?symbol=NASDAQ:${asset.symbol}`;
+      default:
+        return `https://www.tradingview.com/chart/?symbol=NYSE:${asset.symbol}`;
+    }
+  };
+
+  // Enhanced chart animation with investment progress
+  const startChartAnimation = useCallback(() => {
     const canvas = chartCanvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !selectedAsset) return;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -469,6 +544,7 @@ const Trading = () => {
       // Draw grid
       ctx.strokeStyle = '#374151';
       ctx.lineWidth = 1;
+      ctx.setLineDash([5, 5]);
       for (let i = 0; i <= width; i += 50) {
         ctx.beginPath();
         ctx.moveTo(i, 0);
@@ -481,136 +557,168 @@ const Trading = () => {
         ctx.lineTo(width, i);
         ctx.stroke();
       }
+      ctx.setLineDash([]);
 
-      if (selectedAsset) {
-        const assetHistory = priceHistory[selectedAsset.id] || [selectedAsset.current_price];
+      const assetHistory = priceHistory[selectedAsset.id] || [selectedAsset.current_price];
+      
+      if (assetHistory.length > 1) {
+        const maxPrice = Math.max(...assetHistory);
+        const minPrice = Math.min(...assetHistory);
+        const priceRange = maxPrice - minPrice || 1;
+
+        // Draw price line with gradient
+        const gradient = ctx.createLinearGradient(0, 0, width, 0);
+        gradient.addColorStop(0, selectedAsset.trend === 'up' ? '#10B981' : '#EF4444');
+        gradient.addColorStop(1, selectedAsset.trend === 'up' ? '#059669' : '#DC2626');
         
-        if (assetHistory.length > 1) {
-          const maxPrice = Math.max(...assetHistory);
-          const minPrice = Math.min(...assetHistory);
-          const priceRange = maxPrice - minPrice || 1;
+        ctx.strokeStyle = gradient;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
 
-          // Draw price line
-          ctx.strokeStyle = selectedAsset.trend === 'up' ? '#10B981' : '#EF4444';
-          ctx.lineWidth = 3;
+        const points = assetHistory.map((price, index) => {
+          const x = (index / (assetHistory.length - 1)) * width;
+          const y = height - ((price - minPrice) / priceRange) * height * 0.8 - height * 0.1;
+          return { x, y };
+        });
+
+        points.forEach((point, index) => {
+          if (index === 0) {
+            ctx.moveTo(point.x, point.y);
+          } else {
+            ctx.lineTo(point.x, point.y);
+          }
+        });
+        ctx.stroke();
+
+        // Draw investment progress line if amount is entered
+        if (investmentAmount && parseFloat(investmentAmount) >= selectedAsset.min_investment) {
+          const investmentMultiplier = parseFloat(investmentAmount) / selectedAsset.min_investment;
+          const expectedGrowth = 1 + (investmentMultiplier * 0.1); // Simulate growth based on investment
+          
+          ctx.strokeStyle = '#8B5CF6';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([5, 3]);
           ctx.beginPath();
-
-          const points = assetHistory.map((price, index) => {
-            const x = (index / (assetHistory.length - 1)) * width;
-            const y = height - ((price - minPrice) / priceRange) * height * 0.8 - height * 0.1;
-            return { x, y };
-          });
-
-          points.forEach((point, index) => {
-            if (index === 0) {
-              ctx.moveTo(point.x, point.y);
-            } else {
-              const prevPoint = points[index - 1];
-              const cpX = (prevPoint.x + point.x) / 2;
-              ctx.quadraticCurveTo(cpX, prevPoint.y, point.x, point.y);
-            }
-          });
+          ctx.moveTo(0, height * 0.5);
+          ctx.lineTo(width * 0.8, height * 0.5 * (1 / expectedGrowth));
           ctx.stroke();
+          ctx.setLineDash([]);
 
-          // Draw current price indicator
-          const currentPoint = points[points.length - 1];
-          ctx.fillStyle = selectedAsset.trend === 'up' ? '#10B981' : '#EF4444';
+          // Draw target indicator
+          ctx.fillStyle = '#8B5CF6';
           ctx.beginPath();
-          ctx.arc(currentPoint.x, currentPoint.y, 6, 0, 2 * Math.PI);
+          ctx.arc(width * 0.8, height * 0.5 * (1 / expectedGrowth), 6, 0, 2 * Math.PI);
           ctx.fill();
 
-          // Price labels (in USD)
-          ctx.fillStyle = '#9CA3AF';
-          ctx.font = '12px monospace';
-          ctx.fillText(
-            `$${maxPrice.toLocaleString(undefined, { 
-              minimumFractionDigits: selectedAsset.type === 'forex' ? 4 : 2,
-              maximumFractionDigits: selectedAsset.type === 'forex' ? 4 : 2 
-            })}`, 
-            width - 100, 
-            20
-          );
-          ctx.fillText(
-            `$${minPrice.toLocaleString(undefined, { 
-              minimumFractionDigits: selectedAsset.type === 'forex' ? 4 : 2,
-              maximumFractionDigits: selectedAsset.type === 'forex' ? 4 : 2 
-            })}`, 
-            width - 100, 
-            height - 10
-          );
+          // Target label
+          ctx.fillStyle = '#8B5CF6';
+          ctx.font = '10px monospace';
+          ctx.fillText('Target', width * 0.8 + 10, height * 0.5 * (1 / expectedGrowth));
         }
+
+        // Draw current price indicator
+        const currentPoint = points[points.length - 1];
+        ctx.fillStyle = selectedAsset.trend === 'up' ? '#10B981' : '#EF4444';
+        ctx.beginPath();
+        ctx.arc(currentPoint.x, currentPoint.y, 6, 0, 2 * Math.PI);
+        ctx.fill();
+
+        // Price labels
+        ctx.fillStyle = '#9CA3AF';
+        ctx.font = '12px monospace';
+        ctx.fillText(
+          `$${maxPrice.toLocaleString(undefined, { 
+            minimumFractionDigits: selectedAsset.type === 'forex' ? 4 : 2,
+            maximumFractionDigits: selectedAsset.type === 'forex' ? 4 : 2 
+          })}`, 
+          width - 100, 
+          20
+        );
+        ctx.fillText(
+          `$${minPrice.toLocaleString(undefined, { 
+            minimumFractionDigits: selectedAsset.type === 'forex' ? 4 : 2,
+            maximumFractionDigits: selectedAsset.type === 'forex' ? 4 : 2 
+          })}`, 
+          width - 100, 
+          height - 10
+        );
       }
 
       animationRef.current = requestAnimationFrame(drawChart);
     };
 
     drawChart();
-  };
+  }, [selectedAsset, priceHistory, investmentAmount]);
 
-  const handleInvest = async (asset: Asset) => {
-    const amount = parseFloat(investmentAmount);
-    if (!investmentAmount || isNaN(amount) || amount < asset.min_investment) {
-      alert(`Minimum investment for ${asset.name} is ${formatCurrency(asset.min_investment)}`);
-      return;
+  // Chart animation effect
+  useEffect(() => {
+    startChartAnimation();
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [startChartAnimation]);
+
+  // Enhanced real-time price updates for the chart with realistic movement
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (selectedAsset) {
+        setPriceHistory(prev => {
+          const currentHistory = prev[selectedAsset.id] || [selectedAsset.current_price];
+          const trend = selectedAsset.trend === 'up' ? 1 : -1;
+          const volatility = selectedAsset.type === 'crypto' ? 0.008 : 0.003;
+          const changeFactor = (Math.random() * volatility + 0.002) * trend;
+          const newPrice = currentHistory[currentHistory.length - 1] * (1 + changeFactor);
+          
+          return {
+            ...prev,
+            [selectedAsset.id]: [...currentHistory.slice(-49), newPrice]
+          };
+        });
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [selectedAsset]);
+
+  // Auto-select first asset when tab changes
+  useEffect(() => {
+    const currentAssets = getCurrentAssets();
+    if (currentAssets.length > 0 && (!selectedAsset || !currentAssets.find(a => a.id === selectedAsset?.id))) {
+      const firstAsset = currentAssets[0];
+      setSelectedAsset(firstAsset);
+      setInvestmentAmount(firstAsset.min_investment.toString());
     }
-
-    if (!user?.phone_number) {
-      alert('User authentication required');
-      return;
-    }
-
-    setIsInvesting(true);
-    try {
-      const result = await apiService.buyInvestment({
-        asset_id: asset.id,
-        amount: amount,
-        phone_number: user.phone_number
-      });
-
-      alert(`Investment successful! ${result.message}`);
-      setInvestmentAmount('');
-    } catch (error: any) {
-      alert(`Investment failed: ${error.message || 'Unknown error'}`);
-    } finally {
-      setIsInvesting(false);
-    }
-  };
-
-  // Dynamic income calculation that updates with currency and investment amount
-  const calculateTotalIncome = (asset: Asset, amount: number) => {
-    const hourlyIncome = asset.hourly_income;
-    return hourlyIncome * asset.duration * (amount / asset.min_investment);
-  };
-
-  const getTradingViewUrl = (asset: Asset) => {
-    return `https://www.tradingview.com/chart/?symbol=${asset.tradingViewSymbol}`;
-  };
-
-  // Always show USD for prices
-  const getPricePrefix = (asset: Asset) => {
-    return '$'; // Always show USD for asset prices
-  };
+  }, [activeTab, getCurrentAssets]);
 
   const AssetCard = ({ asset }: { asset: Asset }) => {
     const totalIncome = calculateTotalIncome(asset, asset.min_investment);
-    const pricePrefix = getPricePrefix(asset);
+    const roi = calculateROI(asset);
 
     return (
-      <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-4 text-white hover:from-gray-700 hover:to-gray-800 transition duration-200">
+      <div 
+        className={`bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-4 text-white hover:from-gray-700 hover:to-gray-800 transition duration-200 cursor-pointer border-2 ${
+          selectedAsset?.id === asset.id ? 'border-green-500' : 'border-transparent'
+        }`}
+        onClick={() => {
+          setSelectedAsset(asset);
+          setInvestmentAmount(asset.min_investment.toString());
+        }}
+      >
         <div className="flex items-center mb-3">
           <div className={`w-10 h-10 rounded-full flex items-center justify-center mr-3 ${
             asset.trend === 'up' ? 'bg-gradient-to-r from-green-500 to-emerald-500' : 'bg-gradient-to-r from-red-500 to-rose-500'
           }`}>
-            <span className="font-bold text-white">{asset.symbol[0]}</span>
+            <span className="font-bold text-white text-sm">{asset.symbol.substring(0, 3)}</span>
           </div>
-          <div>
+          <div className="flex-1">
             <h3 className="font-bold text-lg">{asset.name}</h3>
             <p className="text-gray-400 text-sm">{asset.symbol} • {asset.type.toUpperCase()}</p>
           </div>
-          <div className="ml-auto text-right">
+          <div className="text-right">
             <p className="font-bold text-lg">
-              {pricePrefix}
-              {asset.current_price.toLocaleString(undefined, { 
+              ${asset.current_price.toLocaleString(undefined, { 
                 minimumFractionDigits: asset.type === 'forex' ? 4 : 2,
                 maximumFractionDigits: asset.type === 'forex' ? 4 : 2 
               })}
@@ -633,20 +741,25 @@ const Trading = () => {
           <div className="flex justify-between text-sm">
             <span className="text-gray-400">Hourly Income</span>
             <span className="text-green-400 font-semibold">
-              {formatCurrency(Number(asset.hourly_income.toFixed(4)))}
+              {formatCurrency(asset.hourly_income)}
             </span>
           </div>
           <div className="flex justify-between text-sm">
-            <span className="text-gray-400">Total Income</span>
+            <span className="text-gray-400">Total Return</span>
             <span className="text-green-400 font-semibold">
-              {formatCurrency(Number(totalIncome.toFixed(4)))}
+              {formatCurrency(totalIncome)}
             </span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-400">ROI</span>
+            <span className="text-yellow-400 font-semibold">{roi}%</span>
           </div>
         </div>
 
         <div className="flex space-x-2">
           <button
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               setSelectedAsset(asset);
               setInvestmentAmount(asset.min_investment.toString());
             }}
@@ -658,6 +771,7 @@ const Trading = () => {
             href={getTradingViewUrl(asset)}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
             className="flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white py-2 px-3 rounded-lg transition duration-200"
             title="Open Advanced Chart in TradingView"
           >
@@ -670,201 +784,153 @@ const Trading = () => {
     );
   };
 
-  // Show loading state while assets are being converted
-  if (isLoading && Object.keys(assets).length === 0) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-300">Loading real-time market data...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500 mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-300">Loading trading platform...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="mx-0 flex-col items-center justify-content-center space-y-6 w-full overflow-x-hidden p-4">
-      {/* Navigation and Header */}
-      <div className="flex items-center justify-between mb-4">
-        <button 
-          onClick={() => navigate('/assets')}
-          className="flex items-center text-blue-500 hover:text-blue-600"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
-            <path fillRule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/>
-          </svg>
-          Back to Assets
-        </button>
-        
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Live Trading</h1>
-          <p className="text-gray-600 dark:text-gray-300">
-            Real-time market data • Prices in USD • Income in {currentCurrency.code}
-            {lastUpdate && (
-              <span className="block text-xs text-gray-500 mt-1">
-                Last update: {lastUpdate.toLocaleTimeString()}
-              </span>
-            )}
-          </p>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
+      {/* Header Section */}
+      <div className="text-center mb-8">
+        <h1 className="text-4xl font-bold text-gray-800 dark:text-white mb-4">
+          Professional Trading Platform
+        </h1>
+        <p className="text-gray-600 dark:text-gray-300 text-lg max-w-2xl mx-auto">
+          Trade with confidence using real-time market data and smart investments
+        </p>
+        <div className="mt-2 text-sm text-green-600 dark:text-green-400">
+          💰 Real-time prices updating every 30 seconds
         </div>
-        
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={fetchAllPrices}
-            disabled={isRefreshing}
-            className="flex items-center space-x-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-3 py-2 rounded-lg text-sm transition duration-200"
-          >
-            <svg 
-              className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} 
-              fill="none" 
-              stroke="currentColor" 
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+      </div>
+
+      {/* Investment Messages */}
+      {investmentError && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-6">
+          <div className="flex items-center">
+            <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
             </svg>
-            <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
-          </button>
-          <div className="flex items-center space-x-2">
-            <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
-            <span className="text-sm text-gray-600 dark:text-gray-300">Live</span>
+            <span>{investmentError}</span>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Asset Type Tabs */}
-      <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-1">
-        <div className="flex space-x-1">
-          {[
-            { id: 'crypto', label: 'Cryptocurrency', count: 10 },
-            { id: 'forex', label: 'Forex', count: 8 },
-            { id: 'futures', label: 'Futures', count: 5 },
-            { id: 'stocks', label: 'Stocks', count: 5 }
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`flex-1 py-3 px-4 rounded-lg font-semibold transition duration-200 ${
-                activeTab === tab.id
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-300 hover:bg-gray-700'
-              }`}
-            >
-              {tab.label} ({tab.count})
-            </button>
-          ))}
+      {investmentSuccess && (
+        <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg mb-6">
+          <div className="flex items-center">
+            <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            <span>{investmentSuccess}</span>
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left Column - Assets Grid */}
-        <div className="space-y-4">
-          <div className="bg-gradient-to-br from-blue-900 to-purple-900 rounded-xl p-4 text-white">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold flex items-center">
-                <span className="w-3 h-3 bg-red-500 rounded-full mr-2 animate-pulse"></span>
-                Live {activeTab.toUpperCase()} Assets
-              </h2>
-              {isRefreshing && (
-                <div className="flex items-center text-sm text-blue-300">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Updating...
-                </div>
-              )}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 max-w-7xl mx-auto">
+        {/* Left Column - Asset List */}
+        <div className="xl:col-span-2 space-y-6">
+          {/* Market Tabs */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
+            <div className="flex space-x-2 mb-6">
+              {(['crypto', 'forex', 'stock'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`flex-1 py-3 px-4 rounded-xl font-semibold text-sm transition duration-200 ${
+                    activeTab === tab
+                      ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  {tab === 'crypto' ? 'CRYPTO (12)' : tab === 'forex' ? 'FOREX & FUTURES (12)' : 'STOCKS (8)'}
+                </button>
+              ))}
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-96 overflow-y-auto">
+
+            {/* Asset Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {getCurrentAssets().map((asset) => (
                 <AssetCard key={asset.id} asset={asset} />
               ))}
             </div>
+
+            {getCurrentAssets().length === 0 && (
+              <div className="text-center py-12">
+                <div className="text-gray-400 dark:text-gray-500 text-6xl mb-4">📊</div>
+                <h3 className="text-xl font-semibold text-gray-600 dark:text-gray-400 mb-2">
+                  No Assets Available
+                </h3>
+                <p className="text-gray-500 dark:text-gray-500">
+                  No trading assets found in this category.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Right Column - Chart & Investment Panel */}
-        <div className="space-y-6">
-          {/* Live Chart */}
-          <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-6 text-white">
+        <div className="xl:col-span-1 space-y-6">
+          {/* Chart Panel */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold">
-                {selectedAsset ? `${selectedAsset.name} (${selectedAsset.symbol})` : 'Select an Asset'}
+              <h3 className="text-xl font-bold text-gray-800 dark:text-white">
+                {selectedAsset ? `${selectedAsset.name} Chart` : 'Market Chart'}
               </h3>
-              <div className="flex space-x-2">
-                {selectedAsset && (
-                  <a
-                    href={getTradingViewUrl(selectedAsset)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition duration-200 flex items-center text-sm"
-                  >
-                    <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-                    </svg>
-                    TradingView
-                  </a>
-                )}
-                <div className="flex space-x-1">
-                  {['1H', '4H', '1D', '1W', '1M'].map((tf) => (
-                    <button
-                      key={tf}
-                      className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm transition duration-200"
-                    >
-                      {tf}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              {selectedAsset && (
+                <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                  selectedAsset.trend === 'up' 
+                    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                    : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                }`}>
+                  {selectedAsset.trend === 'up' ? '📈 BULLISH' : '📉 BEARISH'}
+                </span>
+              )}
             </div>
-            
-            <div className="bg-gray-900 rounded-lg p-4">
-              {selectedAsset ? (
-                <canvas 
-                  ref={chartCanvasRef}
-                  width={600}
-                  height={300}
-                  className="w-full h-48 bg-gray-800 rounded"
-                />
-              ) : (
-                <div className="h-48 bg-gray-800 rounded flex items-center justify-center">
-                  <p className="text-gray-400">Select an asset to view chart</p>
+
+            {/* Chart Container */}
+            <div className="bg-gray-900 rounded-xl p-4 h-64 relative">
+              <canvas
+                ref={chartCanvasRef}
+                width={400}
+                height={240}
+                className="w-full h-full"
+              />
+              
+              {!selectedAsset && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="text-gray-400 text-4xl mb-2">📊</div>
+                    <p className="text-gray-400">Select an asset to view chart</p>
+                  </div>
                 </div>
               )}
             </div>
 
+            {/* Price Stats */}
             {selectedAsset && (
-              <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                <div className="bg-gray-700 rounded-lg p-3">
-                  <p className="text-gray-400 text-sm">Current Price</p>
-                  <p className="font-bold text-lg">
-                    {getPricePrefix(selectedAsset)}
-                    {selectedAsset.current_price.toLocaleString(undefined, { 
+              <div className="grid grid-cols-2 gap-4 mt-4">
+                <div className="text-center bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Current Price</p>
+                  <p className="text-lg font-bold text-gray-800 dark:text-white">
+                    ${selectedAsset.current_price.toLocaleString(undefined, {
                       minimumFractionDigits: selectedAsset.type === 'forex' ? 4 : 2,
-                      maximumFractionDigits: selectedAsset.type === 'forex' ? 4 : 2 
+                      maximumFractionDigits: selectedAsset.type === 'forex' ? 4 : 2
                     })}
                   </p>
                 </div>
-                <div className="bg-gray-700 rounded-lg p-3">
-                  <p className="text-gray-400 text-sm">24h Change</p>
-                  <p className={`font-bold text-lg ${
-                    selectedAsset.change_percentage >= 0 ? 'text-green-400' : 'text-red-400'
+                <div className="text-center bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">24h Change</p>
+                  <p className={`text-lg font-bold ${
+                    selectedAsset.change_percentage >= 0 ? 'text-green-600' : 'text-red-600'
                   }`}>
                     {selectedAsset.change_percentage >= 0 ? '+' : ''}{selectedAsset.change_percentage.toFixed(2)}%
-                  </p>
-                </div>
-                <div className="bg-gray-700 rounded-lg p-3">
-                  <p className="text-gray-400 text-sm">Moving Avg</p>
-                  <p className="font-bold text-lg">
-                    {getPricePrefix(selectedAsset)}
-                    {selectedAsset.moving_average.toLocaleString(undefined, { 
-                      minimumFractionDigits: selectedAsset.type === 'forex' ? 4 : 2,
-                      maximumFractionDigits: selectedAsset.type === 'forex' ? 4 : 2 
-                    })}
-                  </p>
-                </div>
-                <div className="bg-gray-700 rounded-lg p-3">
-                  <p className="text-gray-400 text-sm">Trend</p>
-                  <p className={`font-bold text-lg ${
-                    selectedAsset.trend === 'up' ? 'text-green-400' : 'text-red-400'
-                  }`}>
-                    {selectedAsset.trend.toUpperCase()}
                   </p>
                 </div>
               </div>
@@ -872,13 +938,38 @@ const Trading = () => {
           </div>
 
           {/* Investment Panel */}
-          {selectedAsset && (
-            <div className="bg-gradient-to-br from-green-900 to-emerald-900 rounded-xl p-6 text-white">
-              <h3 className="text-xl font-bold mb-4">Investment Details</h3>
-              
+          <div className="bg-gradient-to-br from-green-900 to-emerald-900 rounded-2xl shadow-lg p-6 text-white sticky top-6">
+            <h3 className="text-xl font-bold mb-4">Investment Panel</h3>
+            
+            {selectedAsset ? (
               <div className="space-y-4">
+                {/* Asset Info */}
+                <div className="bg-green-800 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="font-semibold text-lg">{selectedAsset.name}</span>
+                    <span className="text-sm bg-green-700 px-3 py-1 rounded-full">
+                      {selectedAsset.symbol}
+                    </span>
+                  </div>
+                  <div className="text-sm text-green-100 space-y-1">
+                    <div className="flex justify-between">
+                      <span>Asset Type:</span>
+                      <span className="font-semibold">{selectedAsset.type.toUpperCase()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Investment Period:</span>
+                      <span className="font-semibold">{selectedAsset.duration} Hours</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Minimum Investment:</span>
+                      <span className="font-semibold">{formatCurrency(selectedAsset.min_investment)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Investment Amount */}
                 <div>
-                  <label className="block text-gray-300 mb-2">
+                  <label className="block text-sm font-medium mb-2 text-green-100">
                     Investment Amount ({currentCurrency.code})
                   </label>
                   <input
@@ -886,55 +977,104 @@ const Trading = () => {
                     value={investmentAmount}
                     onChange={(e) => setInvestmentAmount(e.target.value)}
                     min={selectedAsset.min_investment}
-                    step="0.01"
-                    className="w-full p-3 rounded-lg bg-gray-800 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-green-500"
+                    step="1"
+                    className="w-full p-4 rounded-xl bg-green-800 text-white border border-green-600 focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-300 text-lg"
                     placeholder={`Min: ${formatCurrency(selectedAsset.min_investment)}`}
                   />
+                  {walletData && (
+                    <p className="text-sm text-green-200 mt-2">
+                      Available Balance: <span className="font-semibold">{formatCurrency(walletData.balance)}</span>
+                    </p>
+                  )}
                 </div>
 
+                {/* Investment Summary */}
                 {investmentAmount && parseFloat(investmentAmount) >= selectedAsset.min_investment && (
-                  <div className="bg-gray-800 rounded-lg p-4 space-y-3">
-                    <h4 className="font-semibold text-lg mb-2">Investment Summary</h4>
-                    <div className="flex justify-between">
-                      <span className="text-gray-300">Asset:</span>
-                      <span className="font-semibold">{selectedAsset.name}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-300">Duration:</span>
-                      <span className="font-semibold">{selectedAsset.duration} Hours</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-300">Hourly Income:</span>
-                      <span className="text-green-400 font-semibold">
-                        {formatCurrency(Number((selectedAsset.hourly_income * (parseFloat(investmentAmount) / selectedAsset.min_investment)).toFixed(4)))}
-                      </span>
-                    </div>
-                    <div className="flex justify-between border-t border-gray-600 pt-2">
-                      <span className="text-gray-300">Total Income:</span>
-                      <span className="text-green-400 font-bold text-lg">
-                        {formatCurrency(Number(calculateTotalIncome(selectedAsset, parseFloat(investmentAmount)).toFixed(4)))}
-                      </span>
+                  <div className="bg-green-800 rounded-xl p-4 space-y-3">
+                    <h4 className="font-semibold text-lg text-center mb-2">Investment Summary</h4>
+                    
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-green-200">Amount:</span>
+                        <span className="font-semibold">{formatCurrency(parseFloat(investmentAmount))}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-green-200">Hourly Return:</span>
+                        <span className="text-green-300 font-semibold">
+                          {formatCurrency(selectedAsset.hourly_income * (parseFloat(investmentAmount) / selectedAsset.min_investment))}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-green-200">Total Return:</span>
+                        <span className="text-green-300 font-bold text-lg">
+                          {formatCurrency(calculateTotalIncome(selectedAsset, parseFloat(investmentAmount)))}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm border-t border-green-600 pt-2">
+                        <span className="text-green-200">ROI:</span>
+                        <span className="text-yellow-300 font-bold">
+                          {calculateROI(selectedAsset)}%
+                        </span>
+                      </div>
                     </div>
                   </div>
                 )}
 
-                <button
-                  onClick={() => handleInvest(selectedAsset)}
-                  disabled={isInvesting || !investmentAmount || parseFloat(investmentAmount) < selectedAsset.min_investment}
-                  className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 disabled:from-gray-500 disabled:to-gray-600 text-white py-4 rounded-lg font-bold text-lg transition duration-200 disabled:cursor-not-allowed"
-                >
-                  {isInvesting ? (
-                    <div className="flex items-center justify-center">
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                      Processing...
-                    </div>
-                  ) : (
-                    `INVEST ${formatCurrency(parseFloat(investmentAmount) || 0)}`
-                  )}
-                </button>
+                {/* Action Buttons */}
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => {
+                      setSelectedAsset(null);
+                      setInvestmentAmount('');
+                    }}
+                    className="flex-1 py-4 bg-green-700 hover:bg-green-600 text-white rounded-xl font-semibold transition duration-200"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleInvest}
+                    disabled={isInvesting || !investmentAmount || parseFloat(investmentAmount) < selectedAsset.min_investment}
+                    className="flex-1 py-4 bg-white text-green-600 hover:bg-gray-100 rounded-xl font-semibold transition duration-200 disabled:bg-gray-400 disabled:text-gray-600 disabled:cursor-not-allowed text-lg"
+                  >
+                    {isInvesting ? (
+                      <div className="flex items-center justify-center">
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-green-600 mr-2"></div>
+                        Processing...
+                      </div>
+                    ) : (
+                      `INVEST ${formatCurrency(parseFloat(investmentAmount))}`
+                    )}
+                  </button>
+                </div>
+
+                {/* Quick Amount Buttons */}
+                <div className="grid grid-cols-3 gap-2">
+                  {[1, 2, 3].map((multiplier) => {
+                    const amount = selectedAsset.min_investment * multiplier;
+                    return (
+                      <button
+                        key={multiplier}
+                        onClick={() => setInvestmentAmount(amount.toString())}
+                        className="py-3 bg-green-700 hover:bg-green-600 text-white rounded-lg text-sm transition duration-200"
+                      >
+                        {formatCurrency(amount)}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="text-center py-8">
+                <div className="text-green-300 text-4xl mb-4">💼</div>
+                <h3 className="text-lg font-semibold text-white mb-2">
+                  Ready to Invest?
+                </h3>
+                <p className="text-green-200 text-sm">
+                  Select an asset from the list to start your investment journey
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

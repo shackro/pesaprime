@@ -22,18 +22,24 @@ const Profile = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetchUserData();
-  }, []);
+    if (user?.phone_number) {
+      fetchUserData();
+    }
+  }, [user]); // Add user as dependency
 
   const fetchUserData = async () => {
+    if (!user?.phone_number) return;
+    
     try {
-      const [investments, activities] = await Promise.all([
-        apiService.getMyInvestments(),
-        apiService.getMyActivities()
+      const [investments, activities, wallet] = await Promise.all([ // ADD WALLET
+        apiService.getMyInvestments(user.phone_number),
+        apiService.getMyActivities(user.phone_number),
+        apiService.getWalletBalance(user.phone_number) // ADD WALLET FETCH
       ]);
       
       setUserInvestments(investments);
-      setRecentActivities(activities.slice(0, 5)); // Last 5 activities
+      setRecentActivities(activities.slice(1, 5)); // Last 5 activities
+      setWalletData(wallet); // SET WALLET DATA
     } catch (error) {
       console.error('Failed to fetch user data:', error);
     } finally {
@@ -110,9 +116,14 @@ const Profile = () => {
 
   if (loading) {
     return (
-      <div className="mx-3 flex-col items-center justify-content-center space-y-4 overflow-x-hidden min-h-screen">
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+      <div id="loading-overlay" className="fixed inset-0 bg-gray-700 z-50 flex justify-center content-center items-center dark:bg-gray-900">
+        <div className="relative text-center items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="currentColor" className="fill-green-600 bi bi-coin" viewBox="0 0 16 16">
+            <path d="M5.5 9.511c.076.954.83 1.697 2.182 1.785V12h.6v-.709c1.4-.098 2.218-.846 2.218-1.932 0-.987-.626-1.496-1.745-1.76l-.473-.112V5.57c.6.068.982.396 1.074.85h1.052c-.076-.919-.864-1.638-2.126-1.716V4h-.6v.719c-1.195.117-2.01.836-2.01 1.853 0 .9.606 1.472 1.613 1.707l.397.098v2.034c-.615-.093-1.022-.43-1.114-.9zm2.177-2.166c-.59-.137-.91-.416-.91-.836 0-.47.345-.822.915-.925v1.76h-.005zm.692 1.193c.717.166 1.048.435 1.048.91 0 .542-.412.914-1.135.982V8.518z"/>
+            <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"/>
+            <path d="M8 13.5a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11m0 .5A6 6 0 1 0 8 2a6 6 0 0 0 0 12"/>
+          </svg>
+          <div className="absolute -top-3 -left-3 h-20 w-20 p-4 rounded-full border-8 border-dotted border-green-600 animate-spin-slow dark:border-green-400"></div>
         </div>
       </div>
     );

@@ -1,3 +1,4 @@
+// Assets.tsx - Clean Version without Investment Logic
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { apiService, type WalletData, type Asset, type UserInvestment } from '../services/api';
@@ -10,26 +11,31 @@ const Assets = () => {
   const [marketAssets, setMarketAssets] = useState<Asset[]>([]);
   const [userInvestments, setUserInvestments] = useState<UserInvestment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
-  const [investmentAmount, setInvestmentAmount] = useState('');
-  const [investing, setInvesting] = useState(false);
   const { user } = useAuth();
   const { formatCurrency, currentCurrency } = useCurrency();
 
   useEffect(() => {
-    fetchData();
+    if (user?.phone_number) {
+      fetchData();
+    }
     
     // Refresh data every 30 seconds for live updates
-    const interval = setInterval(fetchData, 30000);
+    const interval = setInterval(() => {
+      if (user?.phone_number) {
+        fetchData();
+      }
+    }, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [user]); // Add user as dependency
 
   const fetchData = async () => {
+    if (!user?.phone_number) return;
+    
     try {
       const [wallet, assets, investments] = await Promise.all([
-        apiService.getWalletBalance(),
+        apiService.getWalletBalance(user.phone_number), // FIXED: Added phone number
         apiService.getAssets(),
-        apiService.getMyInvestments()
+        apiService.getMyInvestments(user.phone_number)  // FIXED: Added phone number
       ]);
       
       setWalletData(wallet);
@@ -46,41 +52,24 @@ const Assets = () => {
     }
   };
 
-  const handleInvest = async (asset: Asset) => {
-    if (!investmentAmount || parseFloat(investmentAmount) <= 0) {
-      alert('Please enter a valid investment amount');
-      return;
+  // Helper functions for default values
+  const getDefaultMinInvestment = (type: string) => {
+    switch (type) {
+      case 'crypto': return 10;
+      case 'forex': return 8;
+      case 'futures': return 6;
+      case 'stocks': return 6;
+      default: return 10;
     }
+  };
 
-    if (!user?.phone_number) {
-      alert('User phone number not found');
-      return;
-    }
-
-    const amount = parseFloat(investmentAmount);
-    
-    if (amount > (walletData?.balance || 0)) {
-      alert('Insufficient balance for this investment');
-      return;
-    }
-
-    setInvesting(true);
-    try {
-      const result = await apiService.buyInvestment({
-        asset_id: asset.id,
-        amount: amount,
-        phone_number: user.phone_number
-      });
-
-      alert(`Investment successful! ${result.message}`);
-      setInvestmentAmount('');
-      setSelectedAsset(null);
-      await fetchData(); // Refresh all data
-      
-    } catch (error: unknown) {
-      alert(`Investment failed: ${error.message || 'Unknown error'}`);
-    } finally {
-      setInvesting(false);
+  const getDefaultHourlyIncome = (type: string) => {
+    switch (type) {
+      case 'crypto': return 1.5;
+      case 'forex': return 2.0;
+      case 'futures': return 2.5;
+      case 'stocks': return 3.0;
+      default: return 1.0;
     }
   };
 
@@ -175,6 +164,13 @@ const Assets = () => {
         </div>
       )}
 
+      {/* Trading Component - Handles ALL Investments */}
+      <Trading 
+        walletData={walletData}
+        userInvestments={userInvestments}
+        onInvestmentUpdate={fetchData}
+      />
+      
       {/* Market Assets */}
       <div className="w-full bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-4 text-white">
         <h3 className="text-xl font-bold mb-4 text-center">Live Market Assets</h3>
@@ -182,8 +178,7 @@ const Assets = () => {
           {marketAssets.map((asset) => (
             <div 
               key={asset.id} 
-              className="bg-gray-700 rounded-lg p-4 hover:bg-gray-600 transition duration-200 cursor-pointer"
-              onClick={() => setSelectedAsset(asset)}
+              className="bg-gray-700 rounded-lg p-4 hover:bg-gray-600 transition duration-200"
             >
               <div className="flex justify-between items-start mb-3">
                 <div>
@@ -217,139 +212,43 @@ const Assets = () => {
                     {asset.trend.toUpperCase()}
                   </span>
                 </div>
+                {/* Show hourly income and minimum investment */}
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">Hourly Income:</span>
+                  <span className="text-green-400 font-semibold">
+                    {formatCurrency(asset.hourly_income || 0)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">Min Investment:</span>
+                  <span className="text-yellow-400 font-semibold">
+                    {formatCurrency(asset.min_investment || 0)}
+                  </span>
+                </div>
               </div>
               
-            
               <div className="mt-3 flex space-x-2">
                 <a 
                   href={asset.chart_url} 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-center py-2 rounded text-sm transition"
-                  onClick={(e) => e.stopPropagation()}
                 >
                   View Chart
                 </a>
-                <button 
-                  className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded text-sm transition"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedAsset(asset);
-                  }}
-                >
-                  Invest
-                </button>
-                {/* Add this new Trade button */}
                 <Link 
                   to={`/trading/${asset.id}`}
-                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white text-center py-2 rounded text-sm transition"
-                  onClick={(e) => e.stopPropagation()}
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-white text-center py-2 rounded text-sm transition"
                 >
-                  Trade
+                  Invest Now
                 </Link>
-
               </div>
-
             </div>
           ))}
         </div>
       </div>
 
-
-          <Trading/>
-          
-      {/* Investment Modal */}
-      {selectedAsset && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-md">
-            <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-4">
-              Invest in {selectedAsset.name}
-            </h3>
-            
-            <div className="space-y-3 mb-6">
-              <div className="flex justify-between">
-                <span className="text-gray-600 dark:text-gray-300">Current Price:</span>
-                <span className="font-semibold">
-                  {selectedAsset.type === 'forex' || selectedAsset.type === 'commodity' ? '$' : ''}
-                  {selectedAsset.current_price.toLocaleString()}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600 dark:text-gray-300">24h Change:</span>
-                <span className={selectedAsset.change_percentage >= 0 ? 'text-green-600' : 'text-red-600'}>
-                  {selectedAsset.change_percentage >= 0 ? '+' : ''}{selectedAsset.change_percentage}%
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600 dark:text-gray-300">Available Balance:</span>
-                <span className="font-semibold">{formatCurrency(walletData?.balance || 0)}</span>
-              </div>
-            </div>
-
-            <div className="mb-6">
-              <label className="block text-gray-700 dark:text-gray-300 mb-2">
-                Investment Amount ({currentCurrency.code})
-              </label>
-              <input
-                type="number"
-                value={investmentAmount}
-                onChange={(e) => setInvestmentAmount(e.target.value)}
-                placeholder="Enter amount"
-                className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500"
-              />
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                Min: {formatCurrency(100)}
-              </p>
-            </div>
-
-            {investmentAmount && parseFloat(investmentAmount) > 0 && (
-              <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
-                <h4 className="font-semibold text-gray-800 dark:text-white mb-2">
-                  Investment Details
-                </h4>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span>Units to buy:</span>
-                    <span className="font-semibold">
-                      {(parseFloat(investmentAmount) / selectedAsset.current_price).toFixed(4)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Estimated value:</span>
-                    <span className="font-semibold">{formatCurrency(parseFloat(investmentAmount))}</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="flex space-x-3">
-              <button
-                onClick={() => {
-                  setSelectedAsset(null);
-                  setInvestmentAmount('');
-                }}
-                className="flex-1 py-3 bg-gray-500 hover:bg-gray-600 text-white rounded-xl font-semibold transition duration-200"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleInvest(selectedAsset)}
-                disabled={investing || !investmentAmount || parseFloat(investmentAmount) <= 0}
-                className="flex-1 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 disabled:from-gray-400 disabled:to-gray-500 text-white rounded-xl font-semibold transition duration-200 disabled:cursor-not-allowed"
-              >
-                {investing ? (
-                  <div className="flex items-center justify-center">
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                    Investing...
-                  </div>
-                ) : (
-                  'Confirm Invest'
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      
     </div>
   );
 };

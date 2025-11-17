@@ -1,4 +1,4 @@
-// services/api.ts
+// services/api.ts - UPDATED AND FIXED
 
 // Types
 export interface WalletData {
@@ -13,18 +13,6 @@ export interface User {
   email: string;
   phone_number: string;
   created_at: string;
-}
-
-export interface UserLogin {
-  email: string;
-  password: string;
-}
-
-export interface UserCreate {
-  name: string;
-  email: string;
-  phone_number: string;
-  password: string;
 }
 
 export interface UserLogin {
@@ -106,20 +94,26 @@ export interface UserActivity {
 
 export interface InvestmentRequest {
   asset_id: string;
-  amount: number;
+  amount: number;              // Amount in the selected currency
   phone_number: string;
+  currency: string;            // Add currency field
 }
 
 export interface Asset {
   id: string;
   name: string;
   symbol: string;
-  type: 'forex' | 'crypto' | 'stock' | 'commodity';
+  type: 'crypto' | 'forex' | 'commodity' | 'stock';
   current_price: number;
   change_percentage: number;
   moving_average: number;
   trend: 'up' | 'down';
   chart_url: string;
+  hourly_income: number;        // Now in KES (90-220 range)
+  min_investment: number;       // Now in KES (450-650 range)
+  duration: number;
+  total_income?: number;        // Added for display
+  roi_percentage?: number;      // Added for display
 }
 
 export interface PnLData {
@@ -128,12 +122,12 @@ export interface PnLData {
   trend: 'up' | 'down';
 }
 
-
 class ApiService {
   private baseURL: string;
 
   constructor() {
-    this.baseURL = 'http://localhost:8000';
+    this.baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+    console.log('API Base URL:', this.baseURL);
   }
 
   private getAuthHeaders(): HeadersInit {
@@ -145,132 +139,130 @@ class ApiService {
   }
 
   private async handleResponse<T>(response: Response): Promise<T> {
-        console.log(`Response status: ${response.status} ${response.statusText}`);
+    console.log(`Response status: ${response.status} ${response.statusText}`);
+    
+    if (!response.ok) {
+      let errorMessage = 'Request failed';
+      try {
+        const errorText = await response.text();
+        console.error('Error response text:', errorText);
         
-        if (!response.ok) {
-            let errorMessage = 'Request failed';
-            try {
-                const errorText = await response.text();
-                console.error('Error response text:', errorText);
-                
-                // Try to parse as JSON, but fallback to text
-                try {
-                    const errorData = JSON.parse(errorText);
-                    
-                    // Handle Pydantic validation errors specifically
-                    if (errorData.detail && Array.isArray(errorData.detail)) {
-                        // This is a Pydantic validation error
-                        const validationErrors = errorData.detail.map((err: any) => 
-                            `${err.loc.join('.')}: ${err.msg}`
-                        );
-                        errorMessage = `Validation error: ${validationErrors.join(', ')}`;
-                    } else {
-                        errorMessage = errorData.detail || errorData.message || errorText;
-                    }
-                } catch {
-                    errorMessage = errorText || `HTTP error! status: ${response.status}`;
-                }
-            } catch (parseError) {
-                errorMessage = `HTTP error! status: ${response.status}`;
-            }
-            
-            console.error('Throwing error:', errorMessage);
-            throw new Error(errorMessage);
-        }
-        
+        // Try to parse as JSON, but fallback to text
         try {
-            const data = await response.json();
-            console.log('Response data:', data);
-            return data;
-        } catch (jsonError) {
-            console.error('JSON parse error:', jsonError);
-            throw new Error('Invalid JSON response from server');
+          const errorData = JSON.parse(errorText);
+          
+          // Handle Pydantic validation errors specifically
+          if (errorData.detail && Array.isArray(errorData.detail)) {
+            // This is a Pydantic validation error
+            const validationErrors = errorData.detail.map((err: any) => 
+              `${err.loc.join('.')}: ${err.msg}`
+            );
+            errorMessage = `Validation error: ${validationErrors.join(', ')}`;
+          } else {
+            errorMessage = errorData.detail || errorData.message || errorText;
+          }
+        } catch {
+          errorMessage = errorText || `HTTP error! status: ${response.status}`;
         }
+      } catch (parseError) {
+        errorMessage = `HTTP error! status: ${response.status}`;
+      }
+      
+      console.error('Throwing error:', errorMessage);
+      throw new Error(errorMessage);
     }
-
+    
+    try {
+      const data = await response.json();
+      console.log('Response data:', data);
+      return data;
+    } catch (jsonError) {
+      console.error('JSON parse error:', jsonError);
+      throw new Error('Invalid JSON response from server');
+    }
+  }
 
   // Auth methods
   async register(userData: UserCreate): Promise<AuthResponse> {
-        try {
-            console.log('Attempting registration with:', userData);
-            
-            // FIX: Create a clean, flat object
-            const requestBody = {
-                name: userData.name,
-                email: userData.email,
-                phone_number: userData.phone_number,
-                password: userData.password
-            };
-            
-            console.log('📤 Registration request body:', requestBody);
-            
-            const response = await fetch(`${this.baseURL}/api/auth/register`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestBody), // Use the clean flat object
-            });
+    try {
+      console.log('Attempting registration with:', userData);
+      
+      // Create a clean, flat object
+      const requestBody = {
+        name: userData.name,
+        email: userData.email,
+        phone_number: userData.phone_number,
+        password: userData.password
+      };
+      
+      console.log('📤 Registration request body:', requestBody);
+      
+      const response = await fetch(`${this.baseURL}/api/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
 
-            console.log('Registration response status:', response.status);
-            
-            const data = await this.handleResponse<AuthResponse>(response);
-            console.log('Registration successful:', data);
-            
-            if (data.success && data.access_token) {
-                localStorage.setItem('authToken', data.access_token);
-            }
-            
-            return data;
-        } catch (error) {
-            console.error('Registration error:', error);
-            throw error;
-        }
+      console.log('Registration response status:', response.status);
+      
+      const data = await this.handleResponse<AuthResponse>(response);
+      console.log('Registration successful:', data);
+      
+      if (data.success && data.access_token) {
+        localStorage.setItem('authToken', data.access_token);
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Registration error:', error);
+      throw error;
     }
-
+  }
 
   async login(loginData: UserLogin): Promise<AuthResponse> {
-        try {
-            console.log('🔐 Attempting login with:', loginData);
-            console.log('📡 Sending request to:', `${this.baseURL}/api/auth/login`);
-            
-            // FIX: Create a clean, flat object without nested structure
-            const requestBody = {
-                email: loginData.email,
-                password: loginData.password
-            };
-            
-            console.log('📤 Request body:', requestBody);
-            
-            const response = await fetch(`${this.baseURL}/api/auth/login`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestBody), // Use the clean flat object
-            });
+    try {
+      console.log('🔐 Attempting login with:', loginData);
+      console.log('📡 Sending request to:', `${this.baseURL}/api/auth/login`);
+      
+      // Create a clean, flat object without nested structure
+      const requestBody = {
+        email: loginData.email,
+        password: loginData.password
+      };
+      
+      console.log('📤 Request body:', requestBody);
+      
+      const response = await fetch(`${this.baseURL}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
 
-            console.log('📨 Login response status:', response.status, response.statusText);
-            
-            const data = await this.handleResponse<AuthResponse>(response);
-            console.log('✅ Login successful:', data);
-            
-            if (data.success && data.access_token) {
-                localStorage.setItem('authToken', data.access_token);
-                console.log('💾 Token saved to localStorage');
-            }
-            
-            return data;
-        } catch (error) {
-            console.error('❌ Login error:', error);
-            // Make sure we're throwing a string, not an object
-            if (error instanceof Error) {
-                throw new Error(error.message);
-            } else {
-                throw new Error('Unknown login error');
-            }
-        }
+      console.log('📨 Login response status:', response.status, response.statusText);
+      
+      const data = await this.handleResponse<AuthResponse>(response);
+      console.log('✅ Login successful:', data);
+      
+      if (data.success && data.access_token) {
+        localStorage.setItem('authToken', data.access_token);
+        console.log('💾 Token saved to localStorage');
+      }
+      
+      return data;
+    } catch (error: any) {
+      console.error('❌ Login error:', error);
+      // Make sure we're throwing a string, not an object
+      if (error instanceof Error) {
+        throw new Error(error.message);
+      } else {
+        throw new Error('Unknown login error');
+      }
     }
+  }
 
   async getCurrentUser(): Promise<UserResponse> {
     const response = await fetch(`${this.baseURL}/api/auth/me`, {
@@ -283,7 +275,6 @@ class ApiService {
     localStorage.removeItem('authToken');
   }
 
-
   async getPnL(): Promise<PnLData> {
     const response = await fetch(`${this.baseURL}/api/wallet/pnl`, {
       headers: this.getAuthHeaders(),
@@ -291,9 +282,9 @@ class ApiService {
     return this.handleResponse<PnLData>(response);
   }
 
-  // Wallet methods
-  async getWalletBalance(): Promise<WalletData> {
-    const response = await fetch(`${this.baseURL}/api/wallet/balance`, {
+  // Wallet methods - UPDATED WITH PHONE NUMBER PARAMETER
+  async getWalletBalance(phoneNumber: string): Promise<WalletData> {
+    const response = await fetch(`${this.baseURL}/api/wallet/balance/${phoneNumber}`, {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse<WalletData>(response);
@@ -317,21 +308,32 @@ class ApiService {
     return this.handleResponse<TransactionResponse>(response);
   }
 
-  // Investment methods
-  async getMyInvestments(): Promise<UserInvestment[]> {
-    const response = await fetch(`${this.baseURL}/api/investments/my`, {
+  // Investment methods - UPDATED WITH PHONE NUMBER PARAMETER
+  async getMyInvestments(phoneNumber: string): Promise<UserInvestment[]> {
+    const response = await fetch(`${this.baseURL}/api/investments/my/${phoneNumber}`, {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse<UserInvestment[]>(response);
   }
 
   async buyInvestment(investmentData: InvestmentRequest): Promise<any> {
-    const response = await fetch(`${this.baseURL}/api/investments/buy`, {
-      method: 'POST',
-      headers: this.getAuthHeaders(),
-      body: JSON.stringify(investmentData),
-    });
-    return this.handleResponse(response);
+    try {
+      const response = await fetch(`${this.baseURL}/api/investments/buy`, {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(investmentData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Investment failed: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Buy investment error:', error);
+      throw error;
+    }
   }
 
   // Market data methods
@@ -342,9 +344,9 @@ class ApiService {
     return this.handleResponse<Asset[]>(response);
   }
 
-  // Activity methods
-  async getMyActivities(): Promise<UserActivity[]> {
-    const response = await fetch(`${this.baseURL}/api/activities/my`, {
+  // Activity methods - UPDATED WITH PHONE NUMBER PARAMETER
+  async getMyActivities(phoneNumber: string): Promise<UserActivity[]> {
+    const response = await fetch(`${this.baseURL}/api/activities/my/${phoneNumber}`, {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse<UserActivity[]>(response);
