@@ -2,13 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <link rel="icon" href="https://res.cloudinary.com/jerrick/image/upload/d_642250b563292b35f27461a7.png,f_jpg,fl_progressive,q_auto,w_1024/64c343ec418f46001dda0ac1.jpg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#000000" />
     <meta name="description" content="PesaDash - Personal Finance Dashboard" />
-    
-    <!-- Apple Touch Icon -->
-    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
     
     <title>PesaDash - Personal Finance Dashboard</title>
 
@@ -153,9 +150,6 @@
 
     <!-- Script to initialize theme -->
     <script>
-        
-
-      // Initialize theme from localStorage or system preference
       document.addEventListener('DOMContentLoaded', function() {
         const getTheme = () => {
           if (typeof localStorage !== 'undefined' && localStorage.getItem('theme')) {
@@ -176,22 +170,6 @@
           document.body.classList.remove('dark');
         }
       });
-
-      tailwind.config = {
-          darkMode: 'class',
-          theme: {
-            screens: {
-              'sm': '640px',
-              'md': '768px', 
-              'lg': '1024px',
-              'xl': '1280px',
-              '2xl': '1536px',
-            },
-            extend: {
-              // your existing extensions
-            }
-          }
-        }
     </script>
   </body>
 </html>
