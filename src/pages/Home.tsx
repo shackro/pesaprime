@@ -22,22 +22,20 @@ const Home = () => {
   const { formatCurrency } = useCurrency();
 
   useEffect(() => {
-    fetchData();
-    
-    // Refresh data every 15 seconds for real-time updates
-    const interval = setInterval(fetchData, 15000);
-    return () => clearInterval(interval);
-  }, [user]); // Add user as dependency
+    if (user) {
+      fetchData();
+    }
+  }, [user]);
 
   const fetchData = async () => {
-    if (!user?.phone_number) return;
+    if (!user) return;
     
     try {
       const [wallet, assetsData, investmentsData, activitiesData] = await Promise.all([
-        apiService.getWalletBalance(user.phone_number), // FIXED: Added phone number
+        apiService.getWalletBalance(),
         apiService.getAssets(),
-        apiService.getMyInvestments(user.phone_number), // FIXED: Added phone number
-        apiService.getMyActivities(user.phone_number)   // FIXED: Added phone number
+        apiService.getMyInvestments(),
+        apiService.getMyActivities()
       ]);
       
       setWalletData(wallet);
@@ -46,8 +44,16 @@ const Home = () => {
       setActivities(activitiesData);
     } catch (error) {
       console.error('Failed to fetch data:', error);
-      // Set minimal fallback data
-      setWalletData({ balance: 0, equity: 0, currency: 'KES' });
+      // Set proper fallback data that matches the interface
+      setWalletData({ 
+        id: 0,
+        user_id: 0,
+        balance: 0, 
+        equity: 0, 
+        currency: 'KES',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
       setAssets([]);
       setInvestments([]);
       setActivities([]);

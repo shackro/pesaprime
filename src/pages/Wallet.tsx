@@ -25,13 +25,13 @@ const Wallet = () => {
   }, [user]); // Add user as dependency
 
   const fetchData = async () => {
-    if (!user?.phone_number) return;
+    if (!user) return;
     
     try {
       const [wallet, activitiesData, investments] = await Promise.all([
-        apiService.getWalletBalance(user.phone_number), // FIXED: Added phone number
-        apiService.getMyActivities(user.phone_number),  // FIXED: Added phone number
-        apiService.getMyInvestments(user.phone_number)  // FIXED: Added phone number
+        apiService.getWalletBalance(),
+        apiService.getMyActivities(),
+        apiService.getMyInvestments()
       ]);
       
       setWalletData(wallet);
@@ -44,7 +44,15 @@ const Wallet = () => {
     } catch (error) {
       console.error('Failed to fetch data:', error);
       // Set fallback data that matches your actual wallet state
-      setWalletData({ balance: 0, equity: 0, currency: 'KES' });
+      setWalletData({
+        id: 0,
+        user_id: 0,
+        balance: 0,
+        equity: 0,
+        currency: 'KES',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
       setActivities([]);
       setInvestmentStats({
         totalProfit: 0,

@@ -29,13 +29,13 @@ const Assets = () => {
   }, [user]); // Add user as dependency
 
   const fetchData = async () => {
-    if (!user?.phone_number) return;
+    if (!user) return;
     
     try {
       const [wallet, assets, investments] = await Promise.all([
-        apiService.getWalletBalance(user.phone_number), // FIXED: Added phone number
+        apiService.getWalletBalance(),
         apiService.getAssets(),
-        apiService.getMyInvestments(user.phone_number)  // FIXED: Added phone number
+        apiService.getMyInvestments()
       ]);
       
       setWalletData(wallet);
@@ -44,7 +44,15 @@ const Assets = () => {
     } catch (error) {
       console.error('Failed to fetch data:', error);
       // Set fallback data
-      setWalletData({ balance: 0, equity: 0, currency: 'KES' });
+      setWalletData({
+        id: 0,
+        user_id: 0,
+        balance: 0,
+        equity: 0,
+        currency: 'KES',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
       setMarketAssets([]);
       setUserInvestments([]);
     } finally {
@@ -58,8 +66,6 @@ const Assets = () => {
       case 'crypto': return 10;
       case 'forex': return 8;
       case 'futures': return 6;
-      case 'stocks': return 6;
-      default: return 10;
     }
   };
 

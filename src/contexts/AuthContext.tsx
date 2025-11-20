@@ -53,8 +53,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoading(true);
     try {
       console.log('🔄 Starting login process...');
-      console.log('📧 Email received:', email);
-      console.log('🔑 Password received:', password ? '***'.repeat(password.length) : 'UNDEFINED!');
       
       // Validate inputs
       if (!email || !password) {
@@ -79,11 +77,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       console.log('✅ Login response in context:', response);
       
-      if (response.success && response.access_token) {
+      // FIXED: Handle different response structures
+      if (response.access_token) {
         localStorage.setItem('authToken', response.access_token);
-        setUser(response.user);
-        setIsAuthenticated(true);
-        console.log('👤 User set in context:', response.user);
+        
+        // Try to get user data
+        try {
+          const userData = await apiService.getCurrentUser();
+          setUser(userData);
+          setIsAuthenticated(true);
+          console.log('👤 User set in context:', userData);
+        } catch (userError) {
+          console.warn('Could not fetch user data, using response user:', userError);
+          // If we have user data in response, use it
+          if (response.user) {
+            setUser(response.user);
+            setIsAuthenticated(true);
+          } else {
+            throw new Error('Could not retrieve user information');
+          }
+        }
       } else {
         const errorMsg = response.message || 'Login failed - no token received';
         console.error('❌ Login failed:', errorMsg);
@@ -98,6 +111,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         errorMessage = error.message;
       } else if (typeof error === 'string') {
         errorMessage = error;
+      } else if (error.detail) {
+        errorMessage = error.detail;
       }
       
       throw new Error(errorMessage);
@@ -106,22 +121,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Alternative login method that accepts an object (for backward compatibility)
-  const loginWithObject = async (credentials: UserLogin): Promise<void> => {
-    return login(credentials.email, credentials.password);
-  };
-
   const register = async (userData: UserCreate): Promise<void> => {
     setLoading(true);
     try {
       console.log('Registering user:', userData);
       const response = await apiService.register(userData);
       
-      if (response.success && response.access_token) {
+      // FIXED: Handle different response structures
+      if (response.access_token) {
         localStorage.setItem('authToken', response.access_token);
-        setUser(response.user);
-        setIsAuthenticated(true);
-        console.log('Registration successful, user set:', response.user);
+        
+        // Try to get user data
+        try {
+          const userData = await apiService.getCurrentUser();
+          setUser(userData);
+          setIsAuthenticated(true);
+          console.log('Registration successful, user set:', userData);
+        } catch (userError) {
+          console.warn('Could not fetch user data, using response user:', userError);
+          // If we have user data in response, use it
+          if (response.user) {
+            setUser(response.user);
+            setIsAuthenticated(true);
+          }
+        }
       } else {
         throw new Error(response.message || 'Registration failed');
       }
@@ -133,6 +156,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false);
     }
   };
+
+  // Alternative login method that accepts an object (for backward compatibility)
+  const loginWithObject = async (credentials: UserLogin): Promise<void> => {
+    return login(credentials.email, credentials.password);
+  };
+
+
 
   const logout = (): void => {
     localStorage.removeItem('authToken');
