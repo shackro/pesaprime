@@ -1,13 +1,23 @@
+current code
 {
   "version": 2,
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/" }
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    }
   ],
-
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ],
   "env": {
-    "VITE_API_BASE_URL": "https://pesaprime-end.onrender.com"
+    "VITE_API_BASE_URL": "https://pesaprime-end.onrender.com
+"
   }
 }
