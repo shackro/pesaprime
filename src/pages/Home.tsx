@@ -100,9 +100,9 @@ const Home = () => {
         <h1 className="text-2xl font-bold text-gray-800 dark:text-white">
           Welcome back, {user?.name}!
         </h1>
-        <p className="text-gray-600 dark:text-gray-300">
+        {/* <p className="text-gray-600 dark:text-gray-300">
           Phone: {user?.phone_number}
-        </p>
+        </p> */}
       </div>
 
       {/* Wallet Balance and Equity - DYNAMIC */}
