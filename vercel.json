@@ -1,21 +1,13 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "dist"
-      }
-    }
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/" }
   ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
-    }
-  ],
+
   "env": {
-    "VITE_API_BASE_URL": "https://https://psp-end.onrender.com"
+    "VITE_API_BASE_URL": "https://pesaprime-end.onrender.com"
   }
 }
