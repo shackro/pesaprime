@@ -16,7 +16,6 @@
     }
   ],
   "env": {
-    "VITE_API_BASE_URL": "https://pesaprime-end.onrender.com
-"
+    "VITE_API_BASE_URL": "https://pesaprime-end.onrender.com"
   }
 }
