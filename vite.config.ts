@@ -14,7 +14,7 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'https://pesaprime-end.onrender.com',
+        target: 'https://pesaprime-end-w4mx.onrender.com',
         changeOrigin: true,
         secure: false,
       },
