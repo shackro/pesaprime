@@ -190,7 +190,7 @@ class ApiService {
   private maxRetries: number = 5;
 
   constructor() {
-    this.baseURL = import.meta.env.VITE_API_BASE_URL || 'https://pesaprime-end-w4mx.onrender.com';
+    this.baseURL = import.meta.env.VITE_API_BASE_URL || 'https://pesaprime-b-end.onrender.com';
     console.log('API Base URL:', this.baseURL);
   }
 
