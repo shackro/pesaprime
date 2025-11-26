@@ -17,7 +17,6 @@ import FAQs from './pages/FAQs';
 import Contact from './pages/Contact';
 import AboutUs from './pages/AboutUs';
 import Trading from './components/Trading';
-// import InvestmentsPage from "./pages/InvestmentsPage";
 
 // Loading component
 const LoadingSpinner = () => (
@@ -94,13 +93,6 @@ function AppRoutes() {
           </BaseLayout>
         </ProtectedRoute>
       } />
-      {/* <Route path="/investments" element={
-        <ProtectedRoute>
-          <BaseLayout>
-            <InvestmentsPage />
-          </BaseLayout>
-        </ProtectedRoute>
-      } /> */}
       <Route path="/deposit" element={
         <ProtectedRoute>
           <BaseLayout>
