@@ -1,11 +1,10 @@
-// contexts/AuthContext.tsx - Update the login function
+// contexts/AuthContext.tsx
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { apiService, type UserResponse, type UserLogin, type UserCreate } from '../services/api';
 
 interface AuthContextType {
   user: UserResponse | null;
   login: (email: string, password: string) => Promise<void>;
-  loginWithObject?: (credentials: UserLogin) => Promise<void>; // Optional alternative
   register: (userData: UserCreate) => Promise<void>;
   logout: () => void;
   loading: boolean;
@@ -33,22 +32,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const checkAuth = async () => {
     try {
+      setLoading(true);
       const token = localStorage.getItem('authToken');
       if (token) {
-        const userData = await apiService.getCurrentUser();
-        setUser(userData);
-        setIsAuthenticated(true);
+        try {
+          const userData = await apiService.getCurrentUser();
+          setUser(userData);
+          setIsAuthenticated(true);
+        } catch (error) {
+          console.error('Auth check failed:', error);
+          // Token is invalid, clear it
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('userData');
+          setIsAuthenticated(false);
+        }
       }
     } catch (error) {
-      console.error('Auth check failed:', error);
-      localStorage.removeItem('authToken');
+      console.error('Auth check error:', error);
       setIsAuthenticated(false);
     } finally {
       setLoading(false);
     }
   };
 
-  // FIXED: Login function that accepts two string parameters
   const login = async (email: string, password: string): Promise<void> => {
     setLoading(true);
     try {
@@ -58,52 +64,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!email || !password) {
         throw new Error('Email and password are required');
       }
-      
-      if (typeof email !== 'string' || typeof password !== 'string') {
-        throw new Error('Email and password must be strings');
-      }
 
       const loginData: UserLogin = { 
         email: email.trim(),
         password: password 
       };
       
-      console.log('📤 Final login data being sent:', { 
-        email: loginData.email, 
-        password: '***'.repeat(loginData.password.length) 
-      });
+      console.log('📤 Sending login request...');
       
       const response = await apiService.login(loginData);
       
-      console.log('✅ Login response in context:', response);
+      console.log('✅ Login response received:', response);
       
-      // FIXED: Handle different response structures
       if (response.access_token) {
         localStorage.setItem('authToken', response.access_token);
         
-        // Try to get user data
-        try {
-          const userData = await apiService.getCurrentUser();
-          setUser(userData);
+        // Set user from response
+        if (response.user) {
+          setUser(response.user);
           setIsAuthenticated(true);
-          console.log('👤 User set in context:', userData);
-        } catch (userError) {
-          console.warn('Could not fetch user data, using response user:', userError);
-          // If we have user data in response, use it
-          if (response.user) {
-            setUser(response.user);
-            setIsAuthenticated(true);
-          } else {
-            throw new Error('Could not retrieve user information');
-          }
+          localStorage.setItem('userData', JSON.stringify(response.user));
+          console.log('👤 User authenticated:', response.user);
+        } else {
+          throw new Error('No user data received');
         }
       } else {
-        const errorMsg = response.message || 'Login failed - no token received';
-        console.error('❌ Login failed:', errorMsg);
-        throw new Error(errorMsg);
+        throw new Error(response.message || 'Login failed - no token received');
       }
     } catch (error: any) {
-      console.error('❌ Login error in AuthContext:', error);
+      console.error('❌ Login error:', error);
+      
+      // Clear any invalid auth data
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('userData');
+      setUser(null);
       setIsAuthenticated(false);
       
       let errorMessage = 'Login failed';
@@ -113,6 +107,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         errorMessage = error;
       } else if (error.detail) {
         errorMessage = error.detail;
+      } else if (error.response?.data?.detail) {
+        errorMessage = error.response.data.detail;
       }
       
       throw new Error(errorMessage);
@@ -124,48 +120,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const register = async (userData: UserCreate): Promise<void> => {
     setLoading(true);
     try {
-      console.log('Registering user:', userData);
+      console.log('📝 Registering user...');
       const response = await apiService.register(userData);
       
-      // FIXED: Handle different response structures
-      if (response.access_token) {
+      if (response.access_token && response.user) {
         localStorage.setItem('authToken', response.access_token);
-        
-        // Try to get user data
-        try {
-          const userData = await apiService.getCurrentUser();
-          setUser(userData);
-          setIsAuthenticated(true);
-          console.log('Registration successful, user set:', userData);
-        } catch (userError) {
-          console.warn('Could not fetch user data, using response user:', userError);
-          // If we have user data in response, use it
-          if (response.user) {
-            setUser(response.user);
-            setIsAuthenticated(true);
-          }
-        }
+        setUser(response.user);
+        setIsAuthenticated(true);
+        localStorage.setItem('userData', JSON.stringify(response.user));
+        console.log('✅ Registration successful:', response.user);
       } else {
         throw new Error(response.message || 'Registration failed');
       }
-    } catch (error) {
-      console.error('Registration error in AuthContext:', error);
+    } catch (error: any) {
+      console.error('❌ Registration error:', error);
+      
+      // Clear any invalid data
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('userData');
+      setUser(null);
       setIsAuthenticated(false);
-      throw error;
+      
+      let errorMessage = 'Registration failed';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error.detail) {
+        errorMessage = error.detail;
+      } else if (error.response?.data?.detail) {
+        errorMessage = error.response.data.detail;
+      }
+      
+      throw new Error(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  // Alternative login method that accepts an object (for backward compatibility)
-  const loginWithObject = async (credentials: UserLogin): Promise<void> => {
-    return login(credentials.email, credentials.password);
-  };
-
-
-
   const logout = (): void => {
+    console.log('🚪 Logging out...');
     localStorage.removeItem('authToken');
+    localStorage.removeItem('userData');
     setUser(null);
     setIsAuthenticated(false);
     apiService.logout();
@@ -174,7 +170,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const value: AuthContextType = {
     user,
     login,
-    loginWithObject,
     register,
     logout,
     loading,
