@@ -8,12 +8,11 @@ import axios from "axios";
 
 // Core User Types
 export interface User {
-  id: number;
+  id: string;
   name: string;
   email: string;
   phone_number: string;
   created_at: string;
-  updated_at?: string;
 }
 
 export interface UserLogin {
@@ -35,7 +34,7 @@ export interface UserUpdate {
 }
 
 export interface UserResponse {
-  id: number;
+  id: string;
   name: string;
   email: string;
   phone_number: string;
@@ -49,23 +48,13 @@ export interface AuthResponse {
   access_token: string;
   token_type: string;
   user: UserResponse;
-  refresh_token?: string;
-}
-
-export interface TokenRefreshResponse {
-  access: string;
-  refresh: string;
 }
 
 // Wallet Types
 export interface WalletData {
-  id: number;
-  user_id: number;
   balance: number;
   equity: number;
   currency: string;
-  created_at: string;
-  updated_at: string;
 }
 
 export interface DepositRequest {
@@ -86,22 +75,10 @@ export interface TransactionResponse {
   transaction_id?: string;
 }
 
-// Transaction Types
-export interface Transaction {
-  id: number;
-  user: number;
-  type: 'deposit' | 'withdrawal' | 'investment' | 'bonus';
-  amount: number;
-  description: string;
-  status: 'completed' | 'pending' | 'failed';
-  currency: string;
-  timestamp: string;
-}
-
 // Investment Types
 export interface UserInvestment {
-  id?: number;
-  user?: number;
+  id: string;
+  user_phone: string;
   asset_id: string;
   asset_name: string;
   invested_amount: number;
@@ -115,19 +92,19 @@ export interface UserInvestment {
   roi_percentage?: number;
   profit_loss: number;
   profit_loss_percentage: number;
-  status: 'active' | 'closed';
-  created_at?: string;
+  status: string;
+  created_at: string;
   completion_time?: string;
 }
 
 export interface UserActivity {
-  id?: number;
-  user_phone?: string;
-  activity_type: 'registration' | 'deposit' | 'withdraw' | 'investment';
+  id: string;
+  user_phone: string;
+  activity_type: string;
   amount: number;
   description: string;
   timestamp: string;
-  status: 'completed' | 'pending' | 'failed';
+  status: string;
 }
 
 export interface InvestmentRequest {
@@ -140,11 +117,11 @@ export interface Asset {
   id: string;
   name: string;
   symbol: string;
-  type: 'crypto' | 'forex' | 'commodity' | 'stock';
+  type: string;
   current_price: number;
   change_percentage: number;
   moving_average: number;
-  trend: 'up' | 'down';
+  trend: string;
   chart_url: string;
   hourly_income: number;
   min_investment: number;
@@ -153,12 +130,18 @@ export interface Asset {
   roi_percentage: number;
 }
 
+// PnL Types
+export interface PnLData {
+  profit_loss: number;
+  percentage: number;
+  trend: string;
+}
+
 // Error Types
 export interface ApiError {
   message: string;
   detail?: string;
   code?: string;
-  errors?: Record<string, string[]>;
 }
 
 export interface ValidationError {
@@ -166,13 +149,6 @@ export interface ValidationError {
 }
 
 // Response Wrappers
-export interface PaginatedResponse<T> {
-  count: number;
-  next: string | null;
-  previous: string | null;
-  results: T[];
-}
-
 export interface BaseResponse<T = any> {
   success: boolean;
   message: string;
@@ -186,16 +162,17 @@ export interface BaseResponse<T = any> {
 
 class ApiService {
   private baseURL: string;
-  private retryCount: number = 0;
-  private maxRetries: number = 5;
-
+  
   constructor() {
-    this.baseURL = import.meta.env.VITE_API_BASE_URL || 'https://pesaprime-b-end.onrender.com';
+    this.baseURL = import.meta.env.VITE_API_BASE_URL || 'https://pesaprime-end.onrender.com';
     console.log('API Base URL:', this.baseURL);
+    
+    // Setup axios interceptors
+    this.setupInterceptors();
   }
 
   // ===============================
-  // TOKEN & HEADERS
+  // TOKEN MANAGEMENT
   // ===============================
   private getToken(): string | null {
     return localStorage.getItem('authToken');
@@ -207,79 +184,73 @@ class ApiService {
 
   private removeToken(): void {
     localStorage.removeItem('authToken');
-  }
-
-  private getAuthHeaders(): HeadersInit {
-    const token = this.getToken();
-    return {
-      'Content-Type': 'application/json',
-      ...(token && { 'Authorization': `Bearer ${token}` }),
-    };
+    localStorage.removeItem('userData');
   }
 
   // ===============================
-  // FETCH REQUEST HANDLER
+  // AXIOS SETUP
   // ===============================
-  private async handleResponse<T>(response: Response): Promise<T> {
-    if (!response.ok) {
-      const text = await response.text();
-      let errorMsg = text;
-      try { 
-        const parsed = JSON.parse(text);
-        errorMsg = parsed.detail || parsed.message || JSON.stringify(parsed);
-      } catch {}
-      throw new Error(errorMsg || response.statusText);
-    }
-    if (response.status === 204) return {} as T;
-    return (await response.json()) as T;
-  }
-
-  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const url = `${this.baseURL}${endpoint}`;
-    try {
-      const response = await fetch(url, {
-        headers: this.getAuthHeaders(),
-        ...options,
-      });
-      return await this.handleResponse<T>(response);
-    } catch (error: any) {
-      if (this.retryCount < this.maxRetries && (!error.status || error.message.includes('Network'))) {
-        this.retryCount++;
-        await new Promise(r => setTimeout(r, 500 * this.retryCount));
-        return this.request<T>(endpoint, options);
+  private setupInterceptors() {
+    // Request interceptor
+    this.axiosInstance.interceptors.request.use(
+      (config) => {
+        const token = this.getToken();
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+        config.headers['Content-Type'] = 'application/json';
+        return config;
+      },
+      (error) => {
+        return Promise.reject(error);
       }
-      this.retryCount = 0;
-      throw error;
-    }
+    );
+
+    // Response interceptor
+    this.axiosInstance.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        if (error.response?.status === 401) {
+          this.logout();
+          window.location.href = '/signin';
+        }
+        return Promise.reject(error);
+      }
+    );
   }
 
-  private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  private isNetworkError(error: any): boolean {
-    return error instanceof TypeError || error.message?.includes('Network') || error.message?.includes('fetch');
-  }
+  private axiosInstance = axios.create({
+    baseURL: this.baseURL,
+    timeout: 30000,
+  });
 
   // ===============================
   // AUTH METHODS
   // ===============================
   async register(userData: UserCreate): Promise<AuthResponse> {
-    const data = await this.request<AuthResponse>('/api/auth/register/', {
-      method: 'POST',
-      body: JSON.stringify(userData),
-    });
-    if (data.access_token) this.setToken(data.access_token);
-    return data;
+    try {
+      const response = await this.axiosInstance.post<AuthResponse>('/api/auth/register', userData);
+      if (response.data.access_token) {
+        this.setToken(response.data.access_token);
+        localStorage.setItem('userData', JSON.stringify(response.data.user));
+      }
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || error.message || 'Registration failed');
+    }
   }
 
   async login(loginData: UserLogin): Promise<AuthResponse> {
-    const data = await this.request<AuthResponse>('/api/auth/login/', {
-      method: 'POST',
-      body: JSON.stringify(loginData),
-    });
-    if (data.access_token) this.setToken(data.access_token);
-    return data;
+    try {
+      const response = await this.axiosInstance.post<AuthResponse>('/api/auth/login', loginData);
+      if (response.data.access_token) {
+        this.setToken(response.data.access_token);
+        localStorage.setItem('userData', JSON.stringify(response.data.user));
+      }
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || error.message || 'Login failed');
+    }
   }
 
   logout(): void {
@@ -287,148 +258,135 @@ class ApiService {
   }
 
   async getCurrentUser(): Promise<UserResponse> {
-    return this.request<UserResponse>('/api/auth/user/');
-  }
+    try {
+      const cachedUser = localStorage.getItem('userData');
+      if (cachedUser) {
+        return JSON.parse(cachedUser);
+      }
 
-  async updateProfile(profileData: UserUpdate): Promise<BaseResponse<UserResponse>> {
-    return this.request<BaseResponse<UserResponse>>('/api/auth/profile/update/', {
-      method: 'PUT',
-      body: JSON.stringify(profileData),
-    });
-  }
-
-  async changePassword(passwordData: { current_password: string; new_password: string; confirm_password?: string; }): Promise<BaseResponse> {
-    return this.request<BaseResponse>('/api/auth/password/change/', {
-      method: 'POST',
-      body: JSON.stringify(passwordData),
-    });
+      const response = await this.axiosInstance.get<UserResponse>('/api/auth/me');
+      localStorage.setItem('userData', JSON.stringify(response.data));
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || error.message || 'Failed to get user data');
+    }
   }
 
   // ===============================
   // WALLET METHODS
   // ===============================
-  async getWalletBalance(): Promise<WalletData> {
-    return this.request<WalletData>('/api/wallet/balance/');
+  async getWalletBalance(phoneNumber: string): Promise<WalletData> {
+    try {
+      const response = await this.axiosInstance.get<WalletData>(`/api/wallet/balance/${phoneNumber}`);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || error.message || 'Failed to get wallet balance');
+    }
   }
 
   async depositFunds(data: DepositRequest): Promise<TransactionResponse> {
-    return this.request<TransactionResponse>('/api/wallet/deposit/', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
+    try {
+      const response = await this.axiosInstance.post<TransactionResponse>('/api/wallet/deposit', data);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || error.message || 'Deposit failed');
+    }
   }
 
   async withdrawFunds(data: WithdrawRequest): Promise<TransactionResponse> {
-    return this.request<TransactionResponse>('/api/wallet/withdraw/', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
+    try {
+      const response = await this.axiosInstance.post<TransactionResponse>('/api/wallet/withdraw', data);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || error.message || 'Withdrawal failed');
+    }
+  }
+
+  async getUserPnL(): Promise<PnLData> {
+    try {
+      const response = await this.axiosInstance.get<PnLData>('/api/wallet/pnl');
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || error.message || 'Failed to get PnL data');
+    }
   }
 
   // ===============================
   // INVESTMENT METHODS
   // ===============================
-  // Fetch via Fetch API
-  async getAssets(): Promise<Asset[]> {
-    return this.request<Asset[]>('/api/investments/assets/');
+  async getMarketAssets(): Promise<Asset[]> {
+    try {
+      const response = await this.axiosInstance.get<Asset[]>('/api/assets/market');
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || error.message || 'Failed to get market assets');
+    }
   }
 
-  async getMyInvestments(): Promise<UserInvestment[]> {
-    return this.request<UserInvestment[]>('/api/investments/my-investments/');
+  async getMyInvestments(phoneNumber: string): Promise<UserInvestment[]> {
+    try {
+      const response = await this.axiosInstance.get<UserInvestment[]>(`/api/investments/my/${phoneNumber}`);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || error.message || 'Failed to get investments');
+    }
   }
 
-  async buyInvestment(investmentData: InvestmentRequest): Promise<BaseResponse<{ investment: UserInvestment; new_balance: number }>> {
-    return this.request<BaseResponse<{ investment: UserInvestment; new_balance: number }>>('/api/investments/buy/', {
-      method: 'POST',
-      body: JSON.stringify(investmentData),
-    });
-  }
-
-  // Additional CRUD via Axios for convenience
-  private axiosInstance = axios.create({
-    baseURL: import.meta.env.VITE_API_BASE_URL || 'https://pesaprime-end.onrender.com',
-    headers: { 'Content-Type': 'application/json' },
-  });
-
-  async createInvestment(data: { title: string; amount: number; category?: string; user_id: string }) {
-    const res = await this.axiosInstance.post('/investments/', data);
-    return res.data;
-  }
-
-  async getInvestments(): Promise<UserInvestment[]> {
-    const res = await this.axiosInstance.get('/investments/');
-    return res.data;
-  }
-
-  async getInvestment(id: number): Promise<UserInvestment> {
-    const res = await this.axiosInstance.get(`/investments/${id}`);
-    return res.data;
-  }
-
-  async updateInvestment(id: number, data: Partial<UserInvestment>): Promise<UserInvestment> {
-    const res = await this.axiosInstance.put(`/investments/${id}`, data);
-    return res.data;
-  }
-
-  async deleteInvestment(id: number): Promise<{ message: string }> {
-    const res = await this.axiosInstance.delete(`/investments/${id}`);
-    return res.data;
+  async buyInvestment(investmentData: InvestmentRequest): Promise<any> {
+    try {
+      const response = await this.axiosInstance.post('/api/investments/buy', investmentData);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || error.message || 'Investment failed');
+    }
   }
 
   // ===============================
   // ACTIVITY METHODS
   // ===============================
-  async getMyActivities(params?: { page?: number; activity_type?: string; limit?: number }): Promise<UserActivity[]> {
-    const query = new URLSearchParams();
-    if (params?.page) query.append('page', params.page.toString());
-    if (params?.activity_type) query.append('activity_type', params.activity_type);
-    if (params?.limit) query.append('limit', params.limit.toString());
-    const url = query.toString() ? `/api/activities/?${query}` : '/api/activities/';
-    return this.request<UserActivity[]>(url);
-  }
-
-  // ===============================
-  // FILE UPLOAD & WEBSOCKET
-  // ===============================
-  async uploadProfileImage(file: File): Promise<{ url: string; filename: string }> {
-    const formData = new FormData();
-    formData.append('file', file);
-    const res = await fetch(`${this.baseURL}/api/auth/upload-profile-image/`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${this.getToken()}` },
-      body: formData,
-    });
-    return this.handleResponse(res);
-  }
-
-  getWebSocketUrl(): string {
-    const token = this.getToken();
-    const wsBase = this.baseURL.replace('http', 'ws');
-    return token ? `${wsBase}/ws/investments/?token=${token}` : `${wsBase}/ws/investments/`;
+  async getMyActivities(phoneNumber: string): Promise<UserActivity[]> {
+    try {
+      const response = await this.axiosInstance.get<UserActivity[]>(`/api/activities/my/${phoneNumber}`);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || error.message || 'Failed to get activities');
+    }
   }
 
   // ===============================
   // SYSTEM & UTILITY
   // ===============================
   async healthCheck(): Promise<{ status: string; service: string; timestamp: string }> {
-    return this.request('/api/health/');
-  }
-
-  async getServerStatus(): Promise<{ status: string; database: boolean; cache: boolean; timestamp: string }> {
-    return this.request('/api/status/');
-  }
-
-  clearCache(): void {
-    localStorage.removeItem('cachedAssets');
-    localStorage.removeItem('cachedUserData');
+    try {
+      const response = await this.axiosInstance.get('/api/health');
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || error.message || 'Health check failed');
+    }
   }
 
   isAuthenticated(): boolean {
     return !!this.getToken();
   }
 
-  getAuthState(): { isAuthenticated: boolean; token: string | null } {
-    return { isAuthenticated: this.isAuthenticated(), token: this.getToken() };
+  getAuthState(): { isAuthenticated: boolean; token: string | null; user: UserResponse | null } {
+    const token = this.getToken();
+    const userData = localStorage.getItem('userData');
+    return { 
+      isAuthenticated: !!token, 
+      token, 
+      user: userData ? JSON.parse(userData) : null 
+    };
+  }
+
+  // Helper method to get current user's phone number
+  getCurrentUserPhone(): string | null {
+    const userData = localStorage.getItem('userData');
+    if (userData) {
+      const user = JSON.parse(userData);
+      return user.phone_number;
+    }
+    return null;
   }
 }
 
@@ -457,5 +415,4 @@ export class ApiErrorHandler {
 // EXPORT SINGLETON
 // ===============================
 export const apiService = new ApiService();
-export const useApi = () => apiService;
 export default apiService;
