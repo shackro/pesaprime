@@ -122,7 +122,7 @@ class ApiService {
   private baseURL: string;
   
   constructor() {
-    this.baseURL = import.meta.env.VITE_API_BASE_URL || 'https://pesaprime-end.onrender.com';
+    this.baseURL = import.meta.env.VITE_API_BASE_URL || 'https://pesaprime-end-w4mx.onrender.com';
     console.log('API Base URL:', this.baseURL);
   }
 
