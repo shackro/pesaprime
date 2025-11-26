@@ -59,9 +59,7 @@ function AppRoutes() {
     <Routes>
       {/* Public routes */}
       <Route path="/" element={
-        <PublicRoute>
           <AuthPage />
-        </PublicRoute>
       } />
       
       {/* Protected routes */}
